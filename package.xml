@@ -1,8 +1,13 @@
 <?xml version="1.0"?>
-<package>
-  <name>serial</name>
-  <version>1.2.1</version>
+<?xml-model
+   href="http://download.ros.org/schema/package_format3.xsd"
+   schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>robot_comm_serial</name>
+  <version>0.0.0</version>
   <description>
+
+    Based on serial:
     Serial is a cross-platform, simple to use library for using serial ports on computers.
     This library provides a C++, object oriented interface for interacting with RS-232
     like devices on Linux and Windows.
@@ -22,6 +27,9 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <test_depend>boost</test_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
 
   <export>
   <build_type>ament_cmake</build_type>

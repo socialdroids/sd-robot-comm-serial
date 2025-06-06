@@ -1,9 +1,35 @@
 cmake_minimum_required(VERSION 3.5)
-project(serial)
+project(robot_comm_serial)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra)
+  # add_compile_options(-Wall -Wextra -Wpedantic) # Muitos warnings devido ao -Wpedantic
+endif()
+
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(pluginlib REQUIRED)
 find_package(Protobuf REQUIRED)
+
+include_directories(include)
+
+# Define a list of dependencies
+set(DEPENDENCIES
+  rclcpp
+  geometry_msgs
+  pluginlib
+  nav_msgs
+  Protobuf
+)
 
 include_directories(${Protobuf_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -18,21 +44,14 @@ add_library(proto_lib ${PROTO_SRCS} ${PROTO_HDRS})
 target_include_directories(proto_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(proto_lib ${Protobuf_LIBRARIES})
 
-ament_export_include_directories(include)
-ament_export_libraries(${PROJECT_NAME})
+add_subdirectory(cmake/serial)
 
-message("BIN DIR:")
-message(${CMAKE_CURRENT_BINARY_DIR})
+add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp 
+               ${PROTO_SRCS} ${PROTO_HDRS})
 
-## Sources
-## Add serial library
-add_library(${PROJECT_NAME}
-    src/serial.cc
-    include/serial/serial.h
-    include/serial/v8stdint.h
-    ${PROTO_SRCS}
-    ${PROTO_HDRS}
-)
+target_link_libraries(${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES} serial)
+ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
+
 
 if(APPLE) # macOS
     find_library(IOKIT_LIBRARY IOKit)
@@ -62,37 +81,39 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 
 ## Uncomment for example
-add_executable(serial_example examples/serial_example.cc)
-add_dependencies(serial_example ${PROJECT_NAME})
-target_link_libraries(serial_example ${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES})
-target_include_directories(serial_example PRIVATE include)
-
-install(TARGETS serial_example proto_lib
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-)
+# add_executable(serial_example examples/serial_example.cc)
+# add_dependencies(serial_example ${PROJECT_NAME})
+# target_link_libraries(serial_example ${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES})
+# target_include_directories(serial_example PRIVATE include)
+#
+# install(TARGETS serial_example proto_lib
+#     ARCHIVE DESTINATION lib
+#     LIBRARY DESTINATION lib
+# )
 
 
 ## Install executable
-install(TARGETS ${PROJECT_NAME}
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
+install(TARGETS ${PROJECT_NAME} proto_lib
+    DESTINATION lib/${PROJECT_NAME}
 )
+
+# Install include files
+install(DIRECTORY include/
+  DESTINATION include/
+)
+
+# Install YAML Config files
+# install(DIRECTORY
+#   config
+#   DESTINATION share/${PROJECT_NAME}
+# )
 
 ## Install headers
-install(FILES include/serial/serial.h include/serial/v8stdint.h ${PROTO_HDRS}
-    DESTINATION include/serial
+install(FILES ${PROTO_HDRS}
+    DESTINATION include/${PROJECT_NAME}
 )
 
-# message("Install proto headers")
-# install(FILES ${PROTO_HDRS}
-#     DESTINATION include/${PROJECT_NAME}
-# )
-# message("OK")
-
-## Tests
-#if(BUILD_TESTING)
-#    add_subdirectory(tests)
-#endif()
+ament_export_include_directories(include)
+ament_export_dependencies(${DEPENDENCIES})
 
 ament_package()
