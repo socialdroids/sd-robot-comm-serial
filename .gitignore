@@ -32,3 +32,7 @@ doc/html
 ipch
 Debug
 Release
+install
+log
+.cache
+compile_commands.json

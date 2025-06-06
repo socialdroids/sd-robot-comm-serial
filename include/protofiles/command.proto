@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message CommandMessage 
+{
+  sint32 linearVelocity = 1;
+  sint32 angularVelocity = 2;
+}

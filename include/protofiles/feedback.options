@@ -1,0 +1,2 @@
+syntax = "proto3"
+FeedbackMessage.bumpers max_size:6

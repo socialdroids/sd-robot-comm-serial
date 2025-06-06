@@ -19,6 +19,7 @@
 #include <string>
 #include <iostream>
 #include <cstdio>
+#include <chrono>
 
 // OS Specific sleep
 #ifdef _WIN32
@@ -27,7 +28,8 @@
 #include <unistd.h>
 #endif
 
-#include "serial/serial.h"
+#include <serial/serial.h>
+#include "feedback.pb.h"
 
 using std::string;
 using std::exception;
@@ -110,65 +112,138 @@ int run(int argc, char **argv)
     test_string = "Testing.";
   }
 
-  // Test the timeout, there should be 1 second between prints
-  cout << "Timeout == 1000ms, asking for 1 more byte than written." << endl;
-  while (count < 10) {
-    size_t bytes_wrote = my_serial.write(test_string);
+  using std::chrono::high_resolution_clock;
+  using std::chrono::duration_cast;
+  using std::chrono::duration;
+  using std::chrono::milliseconds;
+  using std::chrono::microseconds;
+  using std::chrono::nanoseconds;
 
-    string result = my_serial.read(test_string.length()+1);
 
-    cout << "Iteration: " << count << ", Bytes written: ";
-    cout << bytes_wrote << ", Bytes read: ";
-    cout << result.length() << ", String read: " << result << endl;
-
-    count += 1;
-  }
+  // // Test the timeout, there should be 1 second between prints
+  // cout << "Timeout == 1000ms, asking for 1 more byte than written." << endl;
+  // while (count < 10) {
+  //   size_t bytes_wrote = my_serial.write(test_string);
+  //
+  //   string result = my_serial.read(test_string.length()+1);
+  //
+  //   cout << "Iteration: " << count << ", Bytes written: ";
+  //   cout << bytes_wrote << ", Bytes read: ";
+  //   cout << result.length() << ", String read: " << result << endl;
+  //
+  //   count += 1;
+  // }
 
   // Test the timeout at 250ms
-  my_serial.setTimeout(serial::Timeout::max(), 250, 0, 250, 0);
+  my_serial.setTimeout(10, 1, 0, 1, 0);
   count = 0;
-  cout << "Timeout == 250ms, asking for 1 more byte than written." << endl;
-  while (count < 10) {
-    size_t bytes_wrote = my_serial.write(test_string);
 
-    string result = my_serial.read(test_string.length()+1);
+  auto t1 = high_resolution_clock::now();
+  auto tPrint = high_resolution_clock::now();
+  auto tLoop = high_resolution_clock::now();
 
-    cout << "Iteration: " << count << ", Bytes written: ";
-    cout << bytes_wrote << ", Bytes read: ";
-    cout << result.length() << ", String read: " << result << endl;
+  int i = 0, packetsReceived = 0, packetSize = 0;
+  float packetFreq = 0, loopFreq[100];
+  string result;
+  FeedbackMessage message;
+  while (true) {
+    // size_t bytes_wrote = my_serial.write(test_string);
+    tLoop = high_resolution_clock::now();
+    if (my_serial.available() > 0)
+    {
+      // cout << my_serial.available() << "\n";
+      packetsReceived++;
+      // packetSize += my_serial.available();
+      // result = my_serial.read(my_serial.available());
+      result = "";
+      packetSize = my_serial.readline(result, 65536, "¬");
+      cout << "Data = ";
+      for (int n = 0; n < packetSize; ++n) {
+        unsigned int num = result.c_str()[n];
+        cout << std::hex << num << std::dec << ", ";
+      }
+      cout << "\n";
+      bool ok = message.ParseFromArray(result.c_str(), packetSize);
+      // cout << "Iteration: " << count << ", Bytes written: ";
+      // cout << bytes_wrote << ", Bytes read: ";
+      // cout << "Bytes read: " << result.length();
+      packetFreq = 1e9/(duration_cast<nanoseconds>(high_resolution_clock::now() - t1)).count();
+      cout << "Packet Size " << packetSize << ", OK? " << ok;
+      if (ok)
+      {
+        if (message.bumpers_size() > 0)
+        {
+            cout << " | Bumper = " << message.bumpers(0).status() << ", ID = " << message.bumpers(0).id();
+        }
+        if (message.bumpers_size() > 1)
+        {
+            cout << " | Bumper = " << message.bumpers(1).status() << ", ID = " << message.bumpers(1).id() ;
+        }
+        if (message.has_pose()) 
+        {
+            cout << " | Pose (x,y,z) = " << message.pose().x() << ", " << message.pose().y() << ", " << message.pose().z();
+        }
+      }
+      cout << " | Packet F = " << packetFreq << " Hz \n";
 
-    count += 1;
+      // count += 1;
+      t1 = high_resolution_clock::now();
+    }
+    if ((duration_cast<milliseconds>(high_resolution_clock::now() - tPrint)).count() > 3000)
+    {
+      // cout << "Packet F = " << packetFreq << " Hz\n";
+      float freqValue = 0;
+      for (int n = 0; n < 100; n++)
+      {
+        freqValue += loopFreq[n];
+      }
+      freqValue /= 100;
+      cout //<< "String read: " << result << "/" << packetSize << ", Packet F = " << packetFreq 
+           << " Hz, Loop F = " << freqValue << " Hz, Packets in 3s = " 
+           << packetsReceived << ", Packets/s = " << packetsReceived/3.0
+           << "\n";
+      packetsReceived = 0;
+      // packetSize = 0;
+
+      tPrint = high_resolution_clock::now();
+    }
+      
+    loopFreq[i++] = 1e9/(duration_cast<nanoseconds>(high_resolution_clock::now() - tLoop)).count();
+    if (i >= 100)
+    {
+      i = 0;
+    }
   }
 
   // Test the timeout at 250ms, but asking exactly for what was written
-  count = 0;
-  cout << "Timeout == 250ms, asking for exactly what was written." << endl;
-  while (count < 10) {
-    size_t bytes_wrote = my_serial.write(test_string);
-
-    string result = my_serial.read(test_string.length());
-
-    cout << "Iteration: " << count << ", Bytes written: ";
-    cout << bytes_wrote << ", Bytes read: ";
-    cout << result.length() << ", String read: " << result << endl;
-
-    count += 1;
-  }
-
-  // Test the timeout at 250ms, but asking for 1 less than what was written
-  count = 0;
-  cout << "Timeout == 250ms, asking for 1 less than was written." << endl;
-  while (count < 10) {
-    size_t bytes_wrote = my_serial.write(test_string);
-
-    string result = my_serial.read(test_string.length()-1);
-
-    cout << "Iteration: " << count << ", Bytes written: ";
-    cout << bytes_wrote << ", Bytes read: ";
-    cout << result.length() << ", String read: " << result << endl;
-
-    count += 1;
-  }
+  // count = 0;
+  // cout << "Timeout == 250ms, asking for exactly what was written." << endl;
+  // while (count < 10) {
+  //   size_t bytes_wrote = my_serial.write(test_string);
+  //
+  //   string result = my_serial.read(test_string.length());
+  //
+  //   cout << "Iteration: " << count << ", Bytes written: ";
+  //   cout << bytes_wrote << ", Bytes read: ";
+  //   cout << result.length() << ", String read: " << result << endl;
+  //
+  //   count += 1;
+  // }
+  //
+  // // Test the timeout at 250ms, but asking for 1 less than what was written
+  // count = 0;
+  // cout << "Timeout == 250ms, asking for 1 less than was written." << endl;
+  // while (count < 10) {
+  //   size_t bytes_wrote = my_serial.write(test_string);
+  //
+  //   string result = my_serial.read(test_string.length()-1);
+  //
+  //   cout << "Iteration: " << count << ", Bytes written: ";
+  //   cout << bytes_wrote << ", Bytes read: ";
+  //   cout << result.length() << ", String read: " << result << endl;
+  //
+  //   count += 1;
+  // }
 
   return 0;
 }
