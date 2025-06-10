@@ -11,9 +11,11 @@
     Serial is a cross-platform, simple to use library for using serial ports on computers.
     This library provides a C++, object oriented interface for interacting with RS-232
     like devices on Linux and Windows.
+
+    Maintainer email="william@osrfoundation.org", William Woodall
   </description>
 
-  <maintainer email="william@osrfoundation.org">William Woodall</maintainer>
+  <maintainer email="leonardo.costa@socialdroids.com">Leonardo Costa Nogueira</maintainer>
 
   <license>MIT</license>
 
@@ -30,6 +32,7 @@
 
   <depend>geometry_msgs</depend>
   <depend>nav2_msgs</depend>
+  <depend>sd_msgs</depend>
 
   <export>
   <build_type>ament_cmake</build_type>
