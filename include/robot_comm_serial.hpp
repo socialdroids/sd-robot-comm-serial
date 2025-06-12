@@ -6,10 +6,12 @@
 #include <rclcpp/rclcpp.hpp>
 #include <serial/serial.h>
 #include <string.h>
+#include <deque>
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "std_msgs/msg/int32_multi_array.hpp"
 
+#include "cobs.h"
 #include "command.pb.h"
 #include "feedback.pb.h"
 
@@ -20,6 +22,30 @@ using std::chrono::microseconds;
 using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
 
+typedef uint8_t CRC_t;
+#define CRC_OK 0x00
+
+// Tabela calculada com o polinomio 0x07
+const CRC_t crcTable[256] = {
+    0,   7,   14,  9,   28,  27,  18,  21,  56,  63,  54,  49,  36,  35,  42,
+    45,  112, 119, 126, 121, 108, 107, 98,  101, 72,  79,  70,  65,  84,  83,
+    90,  93,  224, 231, 238, 233, 252, 251, 242, 245, 216, 223, 214, 209, 196,
+    195, 202, 205, 144, 151, 158, 153, 140, 139, 130, 133, 168, 175, 166, 161,
+    180, 179, 186, 189, 199, 192, 201, 206, 219, 220, 213, 210, 255, 248, 241,
+    246, 227, 228, 237, 234, 183, 176, 185, 190, 171, 172, 165, 162, 143, 136,
+    129, 134, 147, 148, 157, 154, 39,  32,  41,  46,  59,  60,  53,  50,  31,
+    24,  17,  22,  3,   4,   13,  10,  87,  80,  89,  94,  75,  76,  69,  66,
+    111, 104, 97,  102, 115, 116, 125, 122, 137, 142, 135, 128, 149, 146, 155,
+    156, 177, 182, 191, 184, 173, 170, 163, 164, 249, 254, 247, 240, 229, 226,
+    235, 236, 193, 198, 207, 200, 221, 218, 211, 212, 105, 110, 103, 96,  117,
+    114, 123, 124, 81,  86,  95,  88,  77,  74,  67,  68,  25,  30,  23,  16,
+    5,   2,   11,  12,  33,  38,  47,  40,  61,  58,  51,  52,  78,  73,  64,
+    71,  82,  85,  92,  91,  118, 113, 120, 127, 106, 109, 100, 99,  62,  57,
+    48,  55,  34,  37,  44,  43,  6,   1,   8,   15,  26,  29,  20,  19,  174,
+    169, 160, 167, 178, 181, 188, 187, 150, 145, 152, 159, 138, 141, 132, 131,
+    222, 217, 208, 215, 194, 197, 204, 203, 230, 225, 232, 239, 250, 253, 244,
+    243};
+
 class RobotSerial : public rclcpp::Node
 {
 public:
@@ -29,6 +55,10 @@ public:
 private:
     static constexpr char PACKET_END[] = {"\0"};
     static constexpr size_t MAX_PACKET_SIZE{2048};
+    static constexpr int8_t WIDTH = (8 * sizeof(CRC_t));
+    static constexpr int16_t TOPBIT = (1 << (WIDTH - 1));
+    static constexpr int8_t POLYNOMIAL = 0x07;
+
     // Somente para exemplo
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr bumper_vel_pub_;
     rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr bumper_sub_;
@@ -37,8 +67,12 @@ private:
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
 
-    std::string buffer_;
-    float packet_frequency_;
+    // std::string buffer_;
+    size_t packet_size_;
+    uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
+    uint8_t decoded_packet_[MAX_PACKET_SIZE];
+    static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
+    std::deque<float> packet_frequency_;
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
 
     unsigned long baud_;
@@ -49,6 +83,14 @@ private:
     void reconnect_callback();
 
     void connect();
+
+    bool decode_buffer();
+    CRC_t crcFast(uint8_t const* _message, int _nBytes);
+    void update_packet_frequency();
+    float packet_frequency();
+    const char* packet_to_str(uint8_t const* _buffer, size_t _buffLen);
+
+    void publish_data();
 };
 
 #endif // INCLUDE_INCLUDE_ROBOT_COMM_SERIAL_HPP_

@@ -34,20 +34,40 @@ set(DEPENDENCIES
 include_directories(${Protobuf_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-file(GLOB PROTO_FILES
+message("Generating protofiles...")
+file(GLOB MY_PROTO_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/include/protofiles/*.proto
 )
+# protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${MY_PROTO_FILES})
+# add_library(proto_lib ${PROTO_SRCS} ${PROTO_HDRS})
 
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+foreach(PROTO_FILE ${MY_PROTO_FILES})
+    get_filename_component(PROTO_FILENAME ${PROTO_FILE} NAME_WE)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${PROTO_FILENAME}.pb.cc
+               ${CMAKE_CURRENT_BINARY_DIR}/${PROTO_FILENAME}.pb.h
+        COMMAND ${Protobuf_PROTOC_EXECUTABLE}
+        ARGS --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
+             --experimental_allow_proto3_optional
+             -I ${CMAKE_CURRENT_SOURCE_DIR}/include/protofiles
+             ${PROTO_FILE}
+        DEPENDS ${PROTO_FILE}
+    )
+    list(APPEND PROTO_SRCS ${CMAKE_CURRENT_BINARY_DIR}/${PROTO_FILENAME}.pb.cc)
+    list(APPEND PROTO_HDRS ${CMAKE_CURRENT_BINARY_DIR}/${PROTO_FILENAME}.pb.h)
+endforeach()
 
 add_library(proto_lib ${PROTO_SRCS} ${PROTO_HDRS})
+
 target_include_directories(proto_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(proto_lib ${Protobuf_LIBRARIES})
 
+message("Protofiles OK!")
+
 add_subdirectory(cmake/serial)
 
-add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp 
-               ${PROTO_SRCS} ${PROTO_HDRS})
+# add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
+add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/cobs.c)
 
 target_link_libraries(${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES} serial)
 ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})

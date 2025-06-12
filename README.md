@@ -1,5 +1,14 @@
 # Serial Communication Library
 
+## SD Info
+
+When updating .proto files, you need to force CMake to run again with the
+following command:
+```shell
+colcon build --cmake-force-configure
+```
+Not doing so might result in the code not using the updated protofiles.
+
 [![Build Status](https://travis-ci.org/wjwwood/serial.svg?branch=master)](https://travis-ci.org/wjwwood/serial)*(Linux and OS X)* [![Build Status](https://ci.appveyor.com/api/projects/status/github/wjwwood/serial)](https://ci.appveyor.com/project/wjwwood/serial)*(Windows)*
 
 This is a cross-platform library for interfacing with rs-232 serial like ports written in C++. It provides a modern C++ interface with a workflow designed to look and feel like PySerial, but with the speed and control provided by C++. 
