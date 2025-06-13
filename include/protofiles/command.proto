@@ -1,7 +1,63 @@
 syntax = "proto3";
+import "feedback.proto";
+
+enum RobotState
+{
+  ROBOT_STATE_UNSPECIFIED = 0;
+  ROBOT_STATE_MANUAL = 1;
+  ROBOT_STATE_AUTO = 2;
+  ROBOT_STATE_STAND_BY = 3;
+}
+
+enum Verbosity
+{
+  VERBOSITY_UNSPECIFIED = 0;
+  VERBOSITY_LEVEL_1 = 1;
+  VERBOSITY_LEVEL_2 = 2;
+  VERBOSITY_LEVEL_3 = 3;
+}
+
+enum TestMode
+{
+  TEST_MODE_UNSPECIFIED = 0;
+  TEST_MODE_RGB_STRIP = 1;
+  TEST_MODE_ENCODER = 2;
+}
+
+message VelocityCommand
+{
+  sint32 linear = 1;
+  sint32 angular = 2;
+}
+
+
+message RobotActions
+{
+  optional bool jump_to_boot = 1;
+  optional bool emergency_stop = 2;
+  optional TestMode test_mode = 3;
+  optional bool read_sd_card = 4;
+  optional bool dump_parameters = 5;
+}
+
+// message RobotParameters
+// {
+//
+// }
+
+message RobotConfig
+{
+  optional bool open_loop_mode = 1;
+  optional Verbosity verbosity_level = 2;
+  // optional RobotParameters parameters = 3;
+}
 
 message CommandMessage 
 {
-  sint32 linearVelocity = 1;
-  sint32 angularVelocity = 2;
+  VelocityCommand velocities = 1;
+  optional WakeUpConfig wake_up_schedule = 2;
+  optional uint64 timestamp = 3;
+  optional RobotState state = 4;
+  optional RobotActions actions = 5;
+  optional RobotConfig config = 6;
 }

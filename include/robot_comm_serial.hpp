@@ -2,11 +2,11 @@
 #define INCLUDE_INCLUDE_ROBOT_COMM_SERIAL_HPP_
 
 #include <chrono>
+#include <deque>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <serial/serial.h>
 #include <string.h>
-#include <deque>
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "std_msgs/msg/int32_multi_array.hpp"
@@ -66,11 +66,14 @@ private:
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
+    rclcpp::TimerBase::SharedPtr command_timer_;
 
     // std::string buffer_;
     size_t packet_size_;
     uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
+    uint8_t output_buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
     uint8_t decoded_packet_[MAX_PACKET_SIZE];
+    uint8_t encoded_packet_[MAX_PACKET_SIZE];
     static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
     std::deque<float> packet_frequency_;
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
@@ -81,16 +84,44 @@ private:
     void bumper_callback(const std_msgs::msg::Int32MultiArray::SharedPtr msg);
     void packet_callback();
     void reconnect_callback();
+    void command_callback();
 
     void connect();
 
-    bool decode_buffer();
+    void decode_buffer();
     CRC_t crcFast(uint8_t const* _message, int _nBytes);
     void update_packet_frequency();
     float packet_frequency();
     const char* packet_to_str(uint8_t const* _buffer, size_t _buffLen);
 
     void publish_data();
+
+    template <typename Func>
+    void try_serial_operation(Func&& func)
+    {
+        try
+        {
+            func();
+        }
+        catch (serial::PortNotOpenedException& e)
+        {
+            RCLCPP_ERROR(this->get_logger(),
+                         "Serial Operation Failed! Reason: %s.", e.what());
+            connected_ = false;
+        }
+        catch (serial::SerialException& e)
+        {
+            RCLCPP_ERROR(this->get_logger(),
+                         "Serial Operation Failed! Reason: %s.", e.what());
+            connected_ = false;
+        }
+        catch (serial::IOException& e)
+        {
+            RCLCPP_ERROR(this->get_logger(),
+                         "Serial Operation Failed! Reason: %s.", e.what());
+            connected_ = false;
+        }
+    }
 };
 
 #endif // INCLUDE_INCLUDE_ROBOT_COMM_SERIAL_HPP_

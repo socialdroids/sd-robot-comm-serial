@@ -23,6 +23,10 @@ RobotSerial::RobotSerial()
         std::chrono::seconds(1),
         std::bind(&RobotSerial::reconnect_callback, this));
 
+    command_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(10),
+        std::bind(&RobotSerial::command_callback, this));
+
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
 }
@@ -46,8 +50,7 @@ void RobotSerial::packet_callback()
         return;
     }
 
-    try
-    {
+    this->try_serial_operation([&]() {
         size_t available_data = serial_port_->available();
 
         if (available_data >= MAX_PACKET_SIZE)
@@ -66,28 +69,7 @@ void RobotSerial::packet_callback()
 
         packet_size_ = serial_port_->read(
             buffer_, std::min(serial_port_->available(), MAX_PACKET_SIZE));
-    }
-    catch (serial::PortNotOpenedException& e)
-    {
-        RCLCPP_ERROR(this->get_logger(), "Failed to read data! Reason: %s.",
-                     e.what());
-        connected_ = false;
-        return;
-    }
-    catch (serial::SerialException& e)
-    {
-        RCLCPP_ERROR(this->get_logger(), "Failed to read data! Reason: %s.",
-                     e.what());
-        connected_ = false;
-        return;
-    }
-    catch (serial::IOException& e)
-    {
-        RCLCPP_ERROR(this->get_logger(), "Failed to read data! Reason: %s.",
-                     e.what());
-        connected_ = false;
-        return;
-    }
+    });
 
     decode_buffer();
     publish_data();
@@ -109,25 +91,67 @@ void RobotSerial::reconnect_callback()
     }
 }
 
+void RobotSerial::command_callback()
+{
+    if (!connected_)
+    {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Serial port disconnected!");
+        return;
+    }
+
+    CommandMessage message;
+    VelocityCommand* velocity = message.mutable_velocities();
+    velocity->set_angular(1000);
+    velocity->set_linear(500);
+
+    bool ok = message.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
+    size_t message_sz = message.ByteSizeLong();
+
+    if (ok)
+    {
+        CRC_t crc_value = crcFast(encoded_packet_, message.ByteSizeLong());
+        encoded_packet_[message_sz++] = crc_value;
+
+        cobs_encode_result encode_result =
+            cobs_encode(output_buffer_, sizeof(output_buffer_), encoded_packet_,
+                        message_sz);
+
+        output_buffer_[encode_result.out_len++] = 0x00;
+
+        if (encode_result.status == COBS_ENCODE_OK)
+        {
+            this->try_serial_operation([&]() {
+                size_t bytes_written =
+                    serial_port_->write(output_buffer_, encode_result.out_len);
+
+                if (bytes_written == encode_result.out_len && message.has_velocities())
+                {
+                    RCLCPP_INFO(this->get_logger(), "Packet Sent!");
+                }
+                else
+                {
+                    RCLCPP_WARN(this->get_logger(), "Failed to send packet!");
+                }
+            });
+        }
+        else
+        {
+            RCLCPP_ERROR(this->get_logger(), "Failed encode packet (COBS)");
+        }
+    }
+    else
+    {
+        RCLCPP_ERROR(this->get_logger(), "Failed encode packet (Protobuf)");
+    }
+}
+
 void RobotSerial::connect()
 {
-    try
-    {
+    try_serial_operation([&]() {
         serial_port_ = std::make_shared<serial::Serial>(
             port_, baud_, serial::Timeout::simpleTimeout(10));
-    }
-    catch (serial::IOException& e)
-    {
-        serial_port_ = std::make_shared<serial::Serial>();
-        RCLCPP_INFO(this->get_logger(),
-                    "Failed to open serial port! Reason: %s.", e.what());
-    }
-    catch (serial::PortNotOpenedException& e)
-    {
-        serial_port_ = std::make_shared<serial::Serial>();
-        RCLCPP_INFO(this->get_logger(),
-                    "Failed to open serial port! Reason: %s.", e.what());
-    }
+    });
 
     if (serial_port_)
     {
@@ -141,7 +165,7 @@ void RobotSerial::connect()
     }
 }
 
-bool RobotSerial::decode_buffer()
+void RobotSerial::decode_buffer()
 {
     int end_byte_count = 0, packet_count = 0;
     size_t packet_start = 0, packet_end = 0;
@@ -203,7 +227,6 @@ bool RobotSerial::decode_buffer()
                 {
                     RCLCPP_ERROR(this->get_logger(),
                                  "Failed to parse Protobuf message");
-                    return false;
                 }
             }
         }
@@ -212,8 +235,6 @@ bool RobotSerial::decode_buffer()
         packet_count++;
         end_byte_count--;
     }
-
-    return true;
 }
 
 CRC_t RobotSerial::crcFast(uint8_t const* _message, int _nBytes)
