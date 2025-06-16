@@ -1,15 +1,21 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
 #include <cstring>
+#include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <sstream>
 
 RobotSerial::RobotSerial()
-    : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
+    : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM1"),
       connected_(false)
 {
-    bumper_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
-        "/cmd_vel_bumpers", 30);
+    robot_status_pub_ = this->create_publisher<sd_msgs::msg::RobotStatus>(
+        "/robot_base/status", 200);
+    power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
+        "/robot_base/power", 30);
+    base_params_pub_ = this->create_publisher<sd_msgs::msg::BaseParams>(
+        "/robot_base/params", 30);
+
     bumper_sub_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
         "/robot_base/bumpers", 10,
         std::bind(&RobotSerial::bumper_callback, this, std::placeholders::_1));
@@ -26,6 +32,9 @@ RobotSerial::RobotSerial()
     command_timer_ = this->create_wall_timer(
         std::chrono::milliseconds(10),
         std::bind(&RobotSerial::command_callback, this));
+
+    last_message_ = FeedbackMessage();
+    last_message_ok_ = false;
 
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
@@ -125,9 +134,9 @@ void RobotSerial::command_callback()
                 size_t bytes_written =
                     serial_port_->write(output_buffer_, encode_result.out_len);
 
-                if (bytes_written == encode_result.out_len && message.has_velocities())
+                if (bytes_written == encode_result.out_len)
                 {
-                    RCLCPP_INFO(this->get_logger(), "Packet Sent!");
+                    RCLCPP_DEBUG(this->get_logger(), "Packet Sent!");
                 }
                 else
                 {
@@ -219,9 +228,12 @@ void RobotSerial::decode_buffer()
                     decoded_packet_, decode_result.out_len - sizeof(CRC_t));
                 if (ok)
                 {
-                    RCLCPP_INFO(this->get_logger(),
-                                "Received protobuf message:\n %s",
-                                message.DebugString().c_str());
+                    RCLCPP_DEBUG(this->get_logger(),
+                                 "Received protobuf message:\n %s",
+                                 message.DebugString().c_str());
+
+                    last_message_ = message;
+                    last_message_ok_ = true;
                 }
                 else
                 {
@@ -287,6 +299,92 @@ const char* RobotSerial::packet_to_str(uint8_t const* _buffer, size_t _buffLen)
 }
 
 void RobotSerial::publish_data()
+{
+    if (!last_message_ok_)
+    {
+        return;
+    }
+
+    publish_robot_status();
+
+    last_message_ok_ = false;
+}
+
+void RobotSerial::publish_robot_status()
+{
+    sd_msgs::msg::RobotStatus status_data;
+    sd_msgs::msg::Bumper bumper_data;
+    sd_msgs::msg::Encoder encoder_data;
+    nav_msgs::msg::Odometry odometry_data;
+
+    for (int n = 0; n < last_message_.bumpers_size(); n++)
+    {
+        bumper_data.status = last_message_.bumpers(n).status();
+        bumper_data.bumper_id = last_message_.bumpers(n).id();
+        status_data.bumper_data.push_back(bumper_data);
+    }
+
+    // Odometry
+    odometry_data.pose.pose.position.x = last_message_.pose().x_mm() / 1000.0;
+    odometry_data.pose.pose.position.y = last_message_.pose().y_mm() / 1000.0;
+
+    tf2::Quaternion q;
+    q.setRPY(0, 0, last_message_.pose().yaw_trad() / 1000.0);
+    odometry_data.pose.pose.orientation = tf2::toMsg(q);
+    // odometry_data.pose.covariance;
+
+    odometry_data.twist.twist.linear.x =
+        last_message_.velocities().linear_mm_s() / 1000.0;
+    odometry_data.twist.twist.angular.z =
+        last_message_.velocities().angular_trad_s() / 1000.0;
+    // odometry_data.twist.covariance;
+    status_data.odometry = odometry_data;
+
+    // Encoder - left
+    encoder_data.velocity =
+        last_message_.velocities().left_wheel_mm_s() / 1000.0;
+    encoder_data.count = last_message_.encoder().left();
+    if (last_message_.encoder().has_left_status())
+    {
+        last_message_.encoder().left_status().magnitude();
+        last_message_.encoder().left_status().gain();
+        last_message_.encoder().left_status().connected();
+        last_message_.encoder().left_status().magnet_detected();
+        last_message_.encoder().left_status().magnet_weak();
+        last_message_.encoder().left_status().magnet_strong();
+        encoder_data.ppr = last_message_.encoder().left_status().ppr();
+    }
+    status_data.left = encoder_data;
+
+    // Encoder - right
+    encoder_data.velocity =
+        last_message_.velocities().right_wheel_mm_s() / 1000.0;
+    encoder_data.count = last_message_.encoder().right();
+    if (last_message_.encoder().has_right_status())
+    {
+        last_message_.encoder().right_status().magnitude();
+        last_message_.encoder().right_status().gain();
+        last_message_.encoder().right_status().connected();
+        last_message_.encoder().right_status().magnet_detected();
+        last_message_.encoder().right_status().magnet_weak();
+        last_message_.encoder().right_status().magnet_strong();
+        encoder_data.ppr = last_message_.encoder().right_status().ppr();
+    }
+    status_data.right = encoder_data;
+
+    status_data.emergency_button_status =
+        last_message_.emergency_button_pressed();
+    status_data.colision_detected = last_message_.colision_detected();
+
+    if (last_message_.has_info() && last_message_.info().has_debug_data())
+    {
+        status_data.ecu_debug_info = last_message_.info().debug_data();
+    }
+
+    robot_status_pub_->publish(status_data);
+}
+
+void RobotSerial::publish_power_status()
 {
 }
 

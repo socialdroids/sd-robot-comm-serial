@@ -30,7 +30,6 @@ message VelocityCommand
   sint32 angular = 2;
 }
 
-
 message RobotActions
 {
   optional bool jump_to_boot = 1;
@@ -40,16 +39,11 @@ message RobotActions
   optional bool dump_parameters = 5;
 }
 
-// message RobotParameters
-// {
-//
-// }
-
 message RobotConfig
 {
   optional bool open_loop_mode = 1;
   optional Verbosity verbosity_level = 2;
-  // optional RobotParameters parameters = 3;
+  optional RobotParameters parameters = 3;
 }
 
 message CommandMessage 

@@ -8,12 +8,26 @@
 #include <serial/serial.h>
 #include <string.h>
 
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
 #include "geometry_msgs/msg/twist.hpp"
 #include "std_msgs/msg/int32_multi_array.hpp"
 
 #include "cobs.h"
 #include "command.pb.h"
 #include "feedback.pb.h"
+
+// ROS messages
+#include "sd_msgs/msg/base_params.hpp"
+#include "sd_msgs/msg/build_info.hpp"
+#include "sd_msgs/msg/encoder.hpp"
+#include "sd_msgs/msg/encoder_status.hpp"
+#include "sd_msgs/msg/pid_config.hpp"
+#include "sd_msgs/msg/power_status.hpp"
+#include "sd_msgs/msg/robot_parameters.hpp"
+#include "sd_msgs/msg/robot_status.hpp"
+#include "sd_msgs/msg/bumper.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -60,7 +74,10 @@ private:
     static constexpr int8_t POLYNOMIAL = 0x07;
 
     // Somente para exemplo
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr bumper_vel_pub_;
+    rclcpp::Publisher<sd_msgs::msg::RobotStatus>::SharedPtr robot_status_pub_;
+    rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
+    rclcpp::Publisher<sd_msgs::msg::BaseParams>::SharedPtr base_params_pub_;
+
     rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr bumper_sub_;
 
     std::shared_ptr<serial::Serial> serial_port_;
@@ -77,6 +94,9 @@ private:
     static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
     std::deque<float> packet_frequency_;
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
+
+    FeedbackMessage last_message_;
+    bool last_message_ok_;
 
     unsigned long baud_;
     std::string port_;
@@ -95,6 +115,9 @@ private:
     const char* packet_to_str(uint8_t const* _buffer, size_t _buffLen);
 
     void publish_data();
+    void publish_robot_status();
+    void publish_power_status();
+    // void publish_robot_status();
 
     template <typename Func>
     void try_serial_operation(Func&& func)

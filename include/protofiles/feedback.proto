@@ -1,6 +1,19 @@
 syntax = "proto3";
 import "nanopb.proto";
 
+message PIDConfig
+{
+  sint32 k_p = 1;
+  sint32 k_i = 2;
+  sint32 k_d = 3;
+}
+
+message RobotParameters
+{
+  optional PIDConfig left_wheel = 1;
+  optional PIDConfig right_wheel = 2;
+}
+
 enum BumperID {
   BUMPER_ID_UNSPECIFIED = 0;
   BUMPER_ID_BUMPER_A = 1;
@@ -22,14 +35,31 @@ message Pose
   sint64 x_mm = 1;
   sint64 y_mm = 2;
   sint32 yaw_trad = 3;
+  // Inserir covariância
 }
 
 message Velocities
 {
   sint32 linear_mm_s = 1;
   sint32 angular_trad_s = 2;
+  // Inserir covariância
+
   sint32 left_wheel_mm_s = 3;
   sint32 right_wheel_mm_s = 4;
+}
+
+message Array3D
+{
+  sint32 x = 1;
+  sint32 y = 2;
+  sint32 z = 3;
+}
+
+message IMU
+{
+  Array3D acc = 1;
+  Array3D gyro = 2;
+  int32 temperature = 3;
 }
 
 message Encoder
@@ -48,6 +78,7 @@ message EncoderStatus
   bool magnet_detected = 4;
   bool magnet_weak = 5;
   bool magnet_strong = 6;
+  int32 ppr = 7;
 }
 
 message PowerStatus
@@ -91,14 +122,22 @@ message BuildInfo
   string build_date = 4 [(nanopb).max_size = 14];
 }
 
+message RobotHardware
+{
+  string robot_name = 1 [(nanopb).max_size = 10];
+  string ecu_version = 2 [(nanopb).max_size = 10];
+  string driver_version = 3 [(nanopb).max_size = 10];
+  string motor_version = 4 [(nanopb).max_size = 10];
+}
+
 message RobotInfo
 {
-  int32 wheel_distance_mm = 1;
-  int32 wheel_diameter_mm = 2;
-  int32 left_encoder_ppr = 3;
-  int32 right_encoder_ppr = 4;
-  optional string debug_data = 5 [(nanopb).max_size = 500];
-  optional BuildInfo build_data = 6;
+  RobotHardware hardware_info = 1;
+  int32 wheel_distance_mm = 2;
+  int32 wheel_diameter_mm = 3;
+  optional string debug_data = 4 [(nanopb).max_size = 500];
+  optional BuildInfo build_data = 5;
+  optional BuildInfo power_build_data = 6;
 }
 
 message FeedbackMessage
@@ -108,12 +147,19 @@ message FeedbackMessage
   Pose pose = 2;
   Velocities velocities = 3;
   Encoder encoder = 4;
+  IMU imu = 5;
 
-  bool emergency_button_pressed = 5;
-  bool colision_detected = 6;
+  bool emergency_button_pressed = 6;
+  bool colision_detected = 7;
 
-  PowerStatus power_status = 7;
-  StandBy stand_by = 8;
+  PowerStatus power_status = 8;
+  StandBy stand_by = 9;
 
-  optional RobotInfo info = 9;
+  optional RobotParameters parameters = 10;
+  optional RobotInfo info = 11;
+
+  // true sempre que um comando opcional for recebido e foi corretamente
+  // reconhecido. Comandos opcionais: RobotActions, RobotConfig, RobotState,
+  // WakeUpConfig, timestamp
+  optional bool last_command_ok = 12;
 }
