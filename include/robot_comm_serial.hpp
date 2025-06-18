@@ -10,24 +10,35 @@
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include "builtin_interfaces/msg/time.hpp"
 
 #include "geometry_msgs/msg/twist.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/battery_state.hpp"
 #include "std_msgs/msg/int32_multi_array.hpp"
+#include "std_msgs/msg/bool.hpp"
 
 #include "cobs.h"
 #include "command.pb.h"
 #include "feedback.pb.h"
 
+#include "ament_index_cpp/get_package_share_directory.hpp"
+#include <yaml-cpp/yaml.h>
+
 // ROS messages
 #include "sd_msgs/msg/base_params.hpp"
 #include "sd_msgs/msg/build_info.hpp"
+#include "sd_msgs/msg/bumper.hpp"
 #include "sd_msgs/msg/encoder.hpp"
 #include "sd_msgs/msg/encoder_status.hpp"
 #include "sd_msgs/msg/pid_config.hpp"
 #include "sd_msgs/msg/power_status.hpp"
+#include "sd_msgs/msg/robot_bumpers.hpp"
+#include "sd_msgs/msg/robot_debug.hpp"
+#include "sd_msgs/msg/robot_encoders.hpp"
+#include "sd_msgs/msg/robot_flags.hpp"
 #include "sd_msgs/msg/robot_parameters.hpp"
-#include "sd_msgs/msg/robot_status.hpp"
-#include "sd_msgs/msg/bumper.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -73,21 +84,29 @@ private:
     static constexpr int16_t TOPBIT = (1 << (WIDTH - 1));
     static constexpr int8_t POLYNOMIAL = 0x07;
 
-    // Somente para exemplo
-    rclcpp::Publisher<sd_msgs::msg::RobotStatus>::SharedPtr robot_status_pub_;
-    rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
+    rclcpp::Publisher<sd_msgs::msg::RobotFlags>::SharedPtr robot_flags_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
+    rclcpp::Publisher<sd_msgs::msg::RobotEncoders>::SharedPtr encoder_pub_;
+    rclcpp::Publisher<sd_msgs::msg::RobotBumpers>::SharedPtr bumpers_pub_;
+    rclcpp::Publisher<sd_msgs::msg::RobotDebug>::SharedPtr debug_pub_;
     rclcpp::Publisher<sd_msgs::msg::BaseParams>::SharedPtr base_params_pub_;
 
-    rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr bumper_sub_;
+    rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
+
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
 
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
     rclcpp::TimerBase::SharedPtr command_timer_;
 
-    // std::string buffer_;
     size_t packet_size_;
     uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
+    size_t current_buffer_pos_;
+
     uint8_t output_buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
     uint8_t decoded_packet_[MAX_PACKET_SIZE];
     uint8_t encoded_packet_[MAX_PACKET_SIZE];
@@ -96,15 +115,19 @@ private:
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
 
     FeedbackMessage last_message_;
+    CommandMessage last_command_;
     bool last_message_ok_;
 
     unsigned long baud_;
     std::string port_;
     bool connected_;
-    void bumper_callback(const std_msgs::msg::Int32MultiArray::SharedPtr msg);
+    void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
+    void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
     void packet_callback();
     void reconnect_callback();
     void command_callback();
+
+    void clear_command();
 
     void connect();
 
@@ -112,15 +135,21 @@ private:
     CRC_t crcFast(uint8_t const* _message, int _nBytes);
     void update_packet_frequency();
     float packet_frequency();
-    const char* packet_to_str(uint8_t const* _buffer, size_t _buffLen);
+    std::string packet_to_str(uint8_t const* _buffer, size_t _buffLen);
 
     void publish_data();
-    void publish_robot_status();
     void publish_power_status();
-    // void publish_robot_status();
 
-    template <typename Func>
-    void try_serial_operation(Func&& func)
+    void publish_flags();
+    void publish_imu();
+    void publish_odometry();
+    void publish_encoders();
+    void publish_bumpers();
+    void publish_debug();
+    void publish_base_params();
+    void publish_battery();
+
+    template <typename Func> void try_serial_operation(Func&& func)
     {
         try
         {
@@ -145,6 +174,24 @@ private:
             connected_ = false;
         }
     }
+
+    template <typename T>
+    T yaml_get_value(const YAML::Node& node, const std::string& key)
+    {
+        try
+        {
+            return node[key].as<T>();
+        }
+        catch (YAML::Exception& e)
+        {
+            std::stringstream ss;
+            ss << "Failed to parse YAML tag '" << key
+               << "' for reason: " << e.msg;
+            throw YAML::Exception(e.mark, ss.str());
+        }
+    }
+    // auto image_file_name = yaml_get_value<std::string>(doc, "image");
+    // load_parameters.resolution = yaml_get_value<double>(doc, "resolution");
 };
 
 #endif // INCLUDE_INCLUDE_ROBOT_COMM_SERIAL_HPP_

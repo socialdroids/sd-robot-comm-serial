@@ -6,36 +6,83 @@
 #include <sstream>
 
 RobotSerial::RobotSerial()
-    : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM1"),
+    : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
       connected_(false)
 {
-    robot_status_pub_ = this->create_publisher<sd_msgs::msg::RobotStatus>(
-        "/robot_base/status", 200);
-    power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
-        "/robot_base/power", 30);
+
+    std::string share_dir =
+        ament_index_cpp::get_package_share_directory("robot_comm_serial");
+    std::string config_file = share_dir + "/config/robot_serial.yaml";
+    RCLCPP_INFO(this->get_logger(), "Loading Config File: %s",
+                config_file.c_str());
+
+    YAML::Node config = YAML::LoadFile(config_file);
+    port_ = yaml_get_value<std::string>(config, "serial_port");
+    baud_ = yaml_get_value<unsigned long>(config, "baud_rate");
+    int reception_freq = yaml_get_value<int>(config, "reception_frequency");
+    int reconnection_freq =
+        yaml_get_value<int>(config, "reconnection_frequency");
+    int command_freq = yaml_get_value<int>(config, "command_frequency");
+
+    RCLCPP_INFO(this->get_logger(), "Config File OK!");
+    RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
+    RCLCPP_INFO(this->get_logger(), "Baud Rate: %ld", baud_);
+    RCLCPP_INFO(this->get_logger(), "Packet Reception Frequency: %d Hz",
+                reception_freq);
+    RCLCPP_INFO(this->get_logger(), "Reconnection Frequency: %d Hz",
+                reconnection_freq);
+    RCLCPP_INFO(this->get_logger(), "Command Update Frequency: %d Hz",
+                command_freq);
+
+    robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
+        "/robot_base/flags", 200);
+    imu_pub_ =
+        this->create_publisher<sensor_msgs::msg::Imu>("/robot_base/imu", 200);
+    odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
+        "/robot_base/odometry", 200);
+    encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
+        "/robot_base/encoders", 200);
+    bumpers_pub_ = this->create_publisher<sd_msgs::msg::RobotBumpers>(
+        "/robot_base/bumpers", 200);
+    debug_pub_ = this->create_publisher<sd_msgs::msg::RobotDebug>(
+        "/robot_base/debug", 200);
     base_params_pub_ = this->create_publisher<sd_msgs::msg::BaseParams>(
         "/robot_base/params", 30);
 
-    bumper_sub_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
-        "/robot_base/bumpers", 10,
-        std::bind(&RobotSerial::bumper_callback, this, std::placeholders::_1));
+    power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
+        "/robot_base/power", 30);
+    battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
+        "/robot_base/battery", 30);
+
+    cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+        "/cmd_vel", 10, // QoS History Depth
+        std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
+
+    jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        "/robot_action/jump_to_boot", 10, // QoS History Depth
+        std::bind(&RobotSerial::jump_to_boot_callback, this,
+                  std::placeholders::_1));
 
     connect();
 
-    packet_timer_ =
-        this->create_wall_timer(std::chrono::milliseconds(2),
-                                std::bind(&RobotSerial::packet_callback, this));
+    packet_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds((int)(1e3 / reception_freq)),
+        std::bind(&RobotSerial::packet_callback, this));
     reconnect_timer_ = this->create_wall_timer(
-        std::chrono::seconds(1),
+        std::chrono::milliseconds((int)(1e3 / reconnection_freq)),
         std::bind(&RobotSerial::reconnect_callback, this));
-
     command_timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(10),
+        std::chrono::milliseconds((int)(1e3 / command_freq)),
         std::bind(&RobotSerial::command_callback, this));
 
     last_message_ = FeedbackMessage();
+    VelocityCommand* velocity = last_command_.mutable_velocities();
+    velocity->set_angular(0);
+    velocity->set_linear(0);
+
     last_message_ok_ = false;
 
+    current_buffer_pos_ = 0;
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
 }
@@ -44,9 +91,21 @@ RobotSerial::~RobotSerial()
 {
 }
 
-void RobotSerial::bumper_callback(
-    const std_msgs::msg::Int32MultiArray::SharedPtr)
+void RobotSerial::cmd_vel_callback(
+    const geometry_msgs::msg::Twist::SharedPtr msg)
 {
+    VelocityCommand* velocity = last_command_.mutable_velocities();
+    velocity->set_linear(msg->linear.x * 1000);
+    velocity->set_angular(msg->angular.z * 1000);
+}
+
+void RobotSerial::jump_to_boot_callback(
+    const std_msgs::msg::Bool::SharedPtr msg)
+{
+    RobotActions* action = last_command_.mutable_actions();
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] Jump to boot? %d",
+                msg->data);
+    action->set_jump_to_boot(msg->data);
 }
 
 void RobotSerial::packet_callback()
@@ -68,7 +127,7 @@ void RobotSerial::packet_callback()
                         "Too much data in serial buffer (%ld > %ld)!",
                         available_data, MAX_PACKET_SIZE);
         }
-        if (available_data > 0)
+        if (available_data > 0 && current_buffer_pos_ == 0)
         {
             RCLCPP_DEBUG(this->get_logger(), "Data available! %ld",
                          available_data);
@@ -76,8 +135,20 @@ void RobotSerial::packet_callback()
             memset(buffer_, 0xFF, MAX_PACKET_SIZE);
         }
 
-        packet_size_ = serial_port_->read(
-            buffer_, std::min(serial_port_->available(), MAX_PACKET_SIZE));
+        size_t aux =
+            serial_port_->read(&buffer_[current_buffer_pos_],
+                               std::min(serial_port_->available(),
+                                        MAX_PACKET_SIZE - current_buffer_pos_));
+
+        if (current_buffer_pos_ == 0)
+        {
+            packet_size_ = aux;
+        }
+        else
+        {
+            packet_size_ += aux;
+        }
+        current_buffer_pos_ = aux;
     });
 
     decode_buffer();
@@ -109,17 +180,13 @@ void RobotSerial::command_callback()
         return;
     }
 
-    CommandMessage message;
-    VelocityCommand* velocity = message.mutable_velocities();
-    velocity->set_angular(1000);
-    velocity->set_linear(500);
-
-    bool ok = message.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
-    size_t message_sz = message.ByteSizeLong();
+    bool ok = last_command_.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
+    size_t message_sz = last_command_.ByteSizeLong();
 
     if (ok)
     {
-        CRC_t crc_value = crcFast(encoded_packet_, message.ByteSizeLong());
+        CRC_t crc_value =
+            crcFast(encoded_packet_, last_command_.ByteSizeLong());
         encoded_packet_[message_sz++] = crc_value;
 
         cobs_encode_result encode_result =
@@ -137,6 +204,7 @@ void RobotSerial::command_callback()
                 if (bytes_written == encode_result.out_len)
                 {
                     RCLCPP_DEBUG(this->get_logger(), "Packet Sent!");
+                    clear_command();
                 }
                 else
                 {
@@ -152,6 +220,14 @@ void RobotSerial::command_callback()
     else
     {
         RCLCPP_ERROR(this->get_logger(), "Failed encode packet (Protobuf)");
+    }
+}
+
+void RobotSerial::clear_command()
+{
+    if (last_command_.has_actions())
+    {
+        last_command_.clear_actions();
     }
 }
 
@@ -177,7 +253,7 @@ void RobotSerial::connect()
 void RobotSerial::decode_buffer()
 {
     int end_byte_count = 0, packet_count = 0;
-    size_t packet_start = 0, packet_end = 0;
+    size_t packet_start = 0, packet_sz = 0;
     std::vector<size_t> end_pos;
 
     for (size_t n = 0; n < packet_size_; n++)
@@ -188,32 +264,47 @@ void RobotSerial::decode_buffer()
             end_pos.push_back(n);
         }
     }
-    if (end_byte_count)
+    RCLCPP_DEBUG(this->get_logger(), "Packets in buffer: %d", end_byte_count);
+
+    if (end_byte_count > 0)
+    {
         update_packet_frequency();
+        current_buffer_pos_ = 0;
+    }
+    if (end_byte_count == 0 && packet_size_ > 0)
+    {
+        RCLCPP_DEBUG(this->get_logger(), "Wait for more bytes...");
+    }
 
     while (end_byte_count > 0)
     {
         memset(decoded_packet_, 0x00, MAX_PACKET_SIZE);
-        packet_end = end_pos.at(packet_count) - packet_start;
+        packet_sz = end_pos.at(packet_count) - packet_start;
 
         cobs_decode_result decode_result =
             cobs_decode(decoded_packet_, MAX_PACKET_SIZE,
-                        &buffer_[packet_start], packet_end);
+                        &buffer_[packet_start], packet_sz);
 
         if (decode_result.status != COBS_DECODE_OK)
         {
-            RCLCPP_ERROR(this->get_logger(),
-                         "Failed to decode COBS packet: %d. %s",
-                         decode_result.status,
-                         packet_to_str(&buffer_[packet_start], packet_end));
+            RCLCPP_ERROR(
+                this->get_logger(), "Failed to decode COBS packet: %d. %s",
+                decode_result.status,
+                packet_to_str(&buffer_[packet_start], packet_sz).c_str());
         }
         else if (decode_result.out_len == 0)
         {
-            RCLCPP_WARN(this->get_logger(), "Null Packet: %s",
-                        packet_to_str(decoded_packet_, decode_result.out_len));
+            RCLCPP_WARN(
+                this->get_logger(), "Null Packet: %s",
+                packet_to_str(decoded_packet_, decode_result.out_len).c_str());
         }
         else
         {
+            RCLCPP_DEBUG(
+                this->get_logger(), "Decoded COBS packet: %d. %s",
+                decode_result.status,
+                packet_to_str(&buffer_[packet_start], packet_sz).c_str());
+
             CRC_t crc_check = crcFast(decoded_packet_, decode_result.out_len);
             if (crc_check != CRC_OK)
             {
@@ -285,7 +376,7 @@ float RobotSerial::packet_frequency()
            packet_frequency_.size();
 }
 
-const char* RobotSerial::packet_to_str(uint8_t const* _buffer, size_t _buffLen)
+std::string RobotSerial::packet_to_str(uint8_t const* _buffer, size_t _buffLen)
 {
     std::ostringstream aux;
     aux << "Data = [";
@@ -295,7 +386,7 @@ const char* RobotSerial::packet_to_str(uint8_t const* _buffer, size_t _buffLen)
         aux << std::hex << num << std::dec << ", ";
     }
     aux << "]\n";
-    return aux.str().c_str();
+    return aux.str();
 }
 
 void RobotSerial::publish_data()
@@ -305,45 +396,70 @@ void RobotSerial::publish_data()
         return;
     }
 
-    publish_robot_status();
+    publish_flags();
+    publish_imu();
+    publish_odometry();
+    publish_encoders();
+    publish_bumpers();
+    publish_debug();
+    publish_base_params();
+    publish_power_status();
+    publish_battery();
 
     last_message_ok_ = false;
 }
 
-void RobotSerial::publish_robot_status()
+void RobotSerial::publish_flags()
 {
-    sd_msgs::msg::RobotStatus status_data;
-    sd_msgs::msg::Bumper bumper_data;
-    sd_msgs::msg::Encoder encoder_data;
-    nav_msgs::msg::Odometry odometry_data;
+    sd_msgs::msg::RobotFlags msg;
+    msg.emergency_button_status = last_message_.emergency_button_pressed();
+    msg.colision_detected = last_message_.colision_detected();
+    robot_flags_pub_->publish(msg);
+}
 
-    for (int n = 0; n < last_message_.bumpers_size(); n++)
-    {
-        bumper_data.status = last_message_.bumpers(n).status();
-        bumper_data.bumper_id = last_message_.bumpers(n).id();
-        status_data.bumper_data.push_back(bumper_data);
-    }
+void RobotSerial::publish_imu()
+{
+    sensor_msgs::msg::Imu msg;
+    msg.header.stamp = this->get_clock()->now();
+    msg.header.frame_id = "imu";
 
-    // Odometry
-    odometry_data.pose.pose.position.x = last_message_.pose().x_mm() / 1000.0;
-    odometry_data.pose.pose.position.y = last_message_.pose().y_mm() / 1000.0;
+    msg.linear_acceleration.x = last_message_.imu().acc().x() / 1000.f;
+    msg.linear_acceleration.y = last_message_.imu().acc().y() / 1000.f;
+    msg.linear_acceleration.z = last_message_.imu().acc().z() / 1000.f;
+    msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
+    msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
+    msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
+
+    imu_pub_->publish(msg);
+}
+
+void RobotSerial::publish_odometry()
+{
+    nav_msgs::msg::Odometry msg;
+
+    msg.pose.pose.position.x = last_message_.pose().x_mm() / 1000.0;
+    msg.pose.pose.position.y = last_message_.pose().y_mm() / 1000.0;
 
     tf2::Quaternion q;
     q.setRPY(0, 0, last_message_.pose().yaw_trad() / 1000.0);
-    odometry_data.pose.pose.orientation = tf2::toMsg(q);
+    msg.pose.pose.orientation = tf2::toMsg(q);
     // odometry_data.pose.covariance;
 
-    odometry_data.twist.twist.linear.x =
+    msg.twist.twist.linear.x =
         last_message_.velocities().linear_mm_s() / 1000.0;
-    odometry_data.twist.twist.angular.z =
+    msg.twist.twist.angular.z =
         last_message_.velocities().angular_trad_s() / 1000.0;
     // odometry_data.twist.covariance;
-    status_data.odometry = odometry_data;
+    odometry_pub_->publish(msg);
+}
 
+void RobotSerial::publish_encoders()
+{
+    sd_msgs::msg::Encoder data;
+    sd_msgs::msg::RobotEncoders msg;
     // Encoder - left
-    encoder_data.velocity =
-        last_message_.velocities().left_wheel_mm_s() / 1000.0;
-    encoder_data.count = last_message_.encoder().left();
+    data.velocity = last_message_.velocities().left_wheel_mm_s() / 1000.0;
+    data.count = last_message_.encoder().left();
     if (last_message_.encoder().has_left_status())
     {
         last_message_.encoder().left_status().magnitude();
@@ -352,14 +468,13 @@ void RobotSerial::publish_robot_status()
         last_message_.encoder().left_status().magnet_detected();
         last_message_.encoder().left_status().magnet_weak();
         last_message_.encoder().left_status().magnet_strong();
-        encoder_data.ppr = last_message_.encoder().left_status().ppr();
+        data.ppr = last_message_.encoder().left_status().ppr();
     }
-    status_data.left = encoder_data;
+    msg.left = data;
 
     // Encoder - right
-    encoder_data.velocity =
-        last_message_.velocities().right_wheel_mm_s() / 1000.0;
-    encoder_data.count = last_message_.encoder().right();
+    data.velocity = last_message_.velocities().right_wheel_mm_s() / 1000.0;
+    data.count = last_message_.encoder().right();
     if (last_message_.encoder().has_right_status())
     {
         last_message_.encoder().right_status().magnitude();
@@ -368,24 +483,111 @@ void RobotSerial::publish_robot_status()
         last_message_.encoder().right_status().magnet_detected();
         last_message_.encoder().right_status().magnet_weak();
         last_message_.encoder().right_status().magnet_strong();
-        encoder_data.ppr = last_message_.encoder().right_status().ppr();
+        data.ppr = last_message_.encoder().right_status().ppr();
     }
-    status_data.right = encoder_data;
+    msg.right = data;
+    encoder_pub_->publish(msg);
+}
 
-    status_data.emergency_button_status =
-        last_message_.emergency_button_pressed();
-    status_data.colision_detected = last_message_.colision_detected();
+void RobotSerial::publish_bumpers()
+{
+    sd_msgs::msg::Bumper data;
+    sd_msgs::msg::RobotBumpers msg;
 
+    for (int n = 0; n < last_message_.bumpers_size(); n++)
+    {
+        data.status = last_message_.bumpers(n).status();
+        data.bumper_id = last_message_.bumpers(n).id();
+        msg.bumper_data.push_back(data);
+    }
+    bumpers_pub_->publish(msg);
+}
+
+void RobotSerial::publish_debug()
+{
+    sd_msgs::msg::RobotDebug msg;
     if (last_message_.has_info() && last_message_.info().has_debug_data())
     {
-        status_data.ecu_debug_info = last_message_.info().debug_data();
+        msg.ecu_debug_info = last_message_.info().debug_data();
+    }
+    debug_pub_->publish(msg);
+}
+
+void RobotSerial::publish_base_params()
+{
+    sd_msgs::msg::BaseParams msg;
+    sd_msgs::msg::BuildInfo data;
+
+    if (last_message_.has_info())
+    {
+        if (last_message_.info().has_build_data())
+        {
+            data.commit_hash = last_message_.info().build_data().commit_hash();
+            data.branch_name = last_message_.info().build_data().branch_name();
+            data.tag = last_message_.info().build_data().tag();
+            data.build_date = last_message_.info().build_data().build_date();
+
+            msg.build_data = data;
+        }
+
+        // msg.robot_name = last_message_.info().hardware_info().ecu_version();
+        // msg.robot_name =
+        // last_message_.info().hardware_info().driver_version();
+        // msg.robot_name =
+        // last_message_.info().hardware_info().motor_version();
+        msg.robot_name = last_message_.info().hardware_info().robot_name();
+        msg.wheel_distance = last_message_.info().wheel_distance_mm();
+        msg.wheel_diameter = last_message_.info().wheel_diameter_mm();
     }
 
-    robot_status_pub_->publish(status_data);
+    base_params_pub_->publish(msg);
+}
+
+void RobotSerial::publish_battery()
+{
+    sensor_msgs::msg::BatteryState msg;
+    msg.header.stamp = this->get_clock()->now();
+    msg.header.frame_id = "battery";
+
+    msg.voltage = last_message_.power_status().voltage_mv() / 1000.f;
+    msg.current = 0.0;
+    msg.percentage = last_message_.power_status().battery_percent();
+    msg.capacity = last_message_.power_status().battery_capacity();
+    msg.design_capacity = last_message_.power_status().battery_capacity();
+    msg.power_supply_technology =
+        sensor_msgs::msg::BatteryState::POWER_SUPPLY_TECHNOLOGY_LION;
+
+    msg.power_supply_status =
+        sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_DISCHARGING;
+    if (last_message_.power_status().charging())
+    {
+        msg.power_supply_status =
+            sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_CHARGING;
+        msg.current =
+            last_message_.power_status().charging_current_ma() / 1000.f;
+    }
+
+    msg.power_supply_health =
+        sensor_msgs::msg::BatteryState::POWER_SUPPLY_HEALTH_UNKNOWN;
+    msg.present = true;
+    battery_pub_->publish(msg);
 }
 
 void RobotSerial::publish_power_status()
 {
+    sd_msgs::msg::PowerStatus msg;
+    sensor_msgs::msg::Temperature data;
+    msg.charging_current =
+        last_message_.power_status().charging_current_ma() / 1000.f;
+    msg.driver_current =
+        last_message_.power_status().driver_current_ma() / 1000.f;
+    msg.charger_detected = last_message_.power_status().charger_detected();
+
+    data.temperature = last_message_.power_status().temperature();
+    data.variance = 0;
+
+    msg.ecu_temp = data;
+    power_status_pub_->publish(msg);
 }
 
 int main(int argc, char* argv[])

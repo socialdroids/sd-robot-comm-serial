@@ -12,6 +12,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # add_compile_options(-Wall -Wextra -Wpedantic) # Muitos warnings devido ao -Wpedantic
 endif()
 
+include(FetchContent)
+
+FetchContent_Declare(
+  yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+  GIT_TAG yaml-cpp-0.7.0 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
+)
+FetchContent_MakeAvailable(yaml-cpp)
+
+
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
@@ -78,7 +88,9 @@ add_subdirectory(cmake/serial)
 # add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
 add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/cobs.c)
 
-target_link_libraries(${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES} serial)
+target_link_libraries(${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES} serial 
+    yaml-cpp::yaml-cpp)
+
 ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 
 
