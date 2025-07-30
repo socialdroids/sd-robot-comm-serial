@@ -414,6 +414,7 @@ void RobotSerial::publish_flags()
     sd_msgs::msg::RobotFlags msg;
     msg.emergency_button_status = last_message_.emergency_button_pressed();
     msg.colision_detected = last_message_.colision_detected();
+    msg.motion_detection = last_message_.motion_detection();
     robot_flags_pub_->publish(msg);
 }
 
@@ -430,6 +431,13 @@ void RobotSerial::publish_imu()
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
 
+    // RCLCPP_INFO_THROTTLE(
+    //     this->get_logger(), *this->get_clock(), 100,
+    //     "Robot Feedback IMU| X: %d | Y: %d | Theta: %d",
+    //     last_message_.imu().acc().x(),
+    //     last_message_.imu().acc().y(),
+    //     last_message_.imu().gyro().z());
+
     imu_pub_->publish(msg);
 }
 
@@ -443,20 +451,67 @@ void RobotSerial::publish_odometry()
     tf2::Quaternion q;
     q.setRPY(0, 0, last_message_.pose().yaw_trad() / 1000.0);
     msg.pose.pose.orientation = tf2::toMsg(q);
-    // odometry_data.pose.covariance;
+    // msg.pose.covariance = last_message_.pose().covariance();
+
+    // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+    //     "Received covariance sizes: POSE=%d, TWIST=%d",
+    //     last_message_.pose().covariance().size(),
+    //     last_message_.velocities().covariance().size());
+
+    const auto& pose_cov_proto = last_message_.pose().covariance();
+    if (pose_cov_proto.size() == 36) {
+        std::copy(pose_cov_proto.begin(), pose_cov_proto.end(), msg.pose.covariance.begin());
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100, "Size of pose if correct!");
+    }
 
     msg.twist.twist.linear.x =
         last_message_.velocities().linear_mm_s() / 1000.0;
     msg.twist.twist.angular.z =
         last_message_.velocities().angular_trad_s() / 1000.0;
-    // odometry_data.twist.covariance;
+    // msg.twist.covariance = last_message_.velocities().covariance();
+    const auto& twist_cov_proto = last_message_.velocities().covariance();
+    if (twist_cov_proto.size() == 36) {
+        std::copy(twist_cov_proto.begin(), twist_cov_proto.end(), msg.twist.covariance.begin());
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100, "Size of velocity if correct!");
+    }
     odometry_pub_->publish(msg);
+
+    // RCLCPP_INFO_THROTTLE(
+    //     this->get_logger(), *this->get_clock(), 100,
+    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w: %d" ,
+    //     last_message_.pose().x_mm(),
+    //     last_message_.pose().y_mm(),
+    //     last_message_.pose().yaw_trad(),
+    //     last_message_.velocities().linear_mm_s(),
+    //     last_message_.velocities().angular_trad_s());
 }
 
 void RobotSerial::publish_encoders()
 {
     sd_msgs::msg::Encoder data;
     sd_msgs::msg::RobotEncoders msg;
+
+    // RCLCPP_INFO_THROTTLE(
+    //     this->get_logger(), *this->get_clock(), 100,
+    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w: %d" ,
+    //     last_message_.encoder().pose_enc().x_mm(),
+    //     last_message_.encoder().pose_enc().y_mm(),
+    //     last_message_.encoder().pose_enc().yaw_trad(),
+    //     last_message_.encoder().twist_enc().linear_mm_s(),
+    //     last_message_.encoder().twist_enc().angular_trad_s());
+
+    msg.pose.pose.position.x = last_message_.encoder().pose_enc().x_mm() / 1000.0;
+    msg.pose.pose.position.y = last_message_.encoder().pose_enc().y_mm() / 1000.0;
+
+    tf2::Quaternion q;
+    q.setRPY(0, 0, last_message_.encoder().pose_enc().yaw_trad() / 1000.0);
+    msg.pose.pose.orientation = tf2::toMsg(q);
+    
+    msg.yaw_radians = last_message_.encoder().pose_enc().yaw_trad() / 1000.0;
+
+    msg.twist.twist.linear.x = last_message_.encoder().twist_enc().linear_mm_s() / 1000.0;
+    msg.twist.twist.angular.z = last_message_.encoder().twist_enc().angular_trad_s() / 1000.0;
+
     // Encoder - left
     data.velocity = last_message_.velocities().left_wheel_mm_s() / 1000.0;
     data.count = last_message_.encoder().left();

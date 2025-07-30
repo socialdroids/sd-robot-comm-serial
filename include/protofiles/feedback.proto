@@ -35,17 +35,17 @@ message Pose
   sint64 x_mm = 1;
   sint64 y_mm = 2;
   sint32 yaw_trad = 3;
-  // Inserir covariância
+  repeated double covariance = 4 [(nanopb).max_count = 36];
 }
 
 message Velocities
 {
   sint32 linear_mm_s = 1;
   sint32 angular_trad_s = 2;
-  // Inserir covariância
+  repeated double covariance = 3 [(nanopb).max_count = 36];
 
-  sint32 left_wheel_mm_s = 3;
-  sint32 right_wheel_mm_s = 4;
+  sint32 left_wheel_mm_s = 4;
+  sint32 right_wheel_mm_s = 5;
 }
 
 message Array3D
@@ -68,6 +68,8 @@ message Encoder
   sint64 right = 2;
   optional EncoderStatus left_status = 3;
   optional EncoderStatus right_status = 4;
+  Pose pose_enc = 5;
+  Velocities twist_enc = 6;
 }
 
 message EncoderStatus
@@ -151,15 +153,16 @@ message FeedbackMessage
 
   bool emergency_button_pressed = 6;
   bool colision_detected = 7;
+  bool motion_detection = 8;
 
-  PowerStatus power_status = 8;
-  StandBy stand_by = 9;
+  PowerStatus power_status = 9;
+  StandBy stand_by = 10;
 
-  optional RobotParameters parameters = 10;
-  optional RobotInfo info = 11;
+  optional RobotParameters parameters = 11;
+  optional RobotInfo info = 12;
 
   // true sempre que um comando opcional for recebido e foi corretamente
   // reconhecido. Comandos opcionais: RobotActions, RobotConfig, RobotState,
   // WakeUpConfig, timestamp
-  optional bool last_command_ok = 12;
+  optional bool last_command_ok = 13;
 }
