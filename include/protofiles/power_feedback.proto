@@ -1,0 +1,10 @@
+syntax = "proto3";
+import "aux.proto";
+import "nanopb.proto";
+
+message PowerFeedbackMessage
+{
+  PowerStatus power_status = 1;
+  StandBy stand_by = 2;
+  string debug_data = 3 [(nanopb).max_size = 500];
+}

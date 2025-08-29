@@ -35,31 +35,31 @@ RobotSerial::RobotSerial()
                 command_freq);
 
     robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
-        "/robot_base/flags", 200);
+        "robot_base/flags", 200);
     imu_pub_ =
-        this->create_publisher<sensor_msgs::msg::Imu>("/robot_base/imu", 200);
+        this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu", 200);
     odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
-        "/robot_base/odometry", 200);
+        "robot_base/odometry", 200);
     encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
-        "/robot_base/encoders", 200);
+        "robot_base/encoders", 200);
     bumpers_pub_ = this->create_publisher<sd_msgs::msg::RobotBumpers>(
-        "/robot_base/bumpers", 200);
+        "robot_base/bumpers", 200);
     debug_pub_ = this->create_publisher<sd_msgs::msg::RobotDebug>(
-        "/robot_base/debug", 200);
+        "robot_base/debug", 200);
     base_params_pub_ = this->create_publisher<sd_msgs::msg::BaseParams>(
-        "/robot_base/params", 30);
+        "robot_base/params", 30);
 
     power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
-        "/robot_base/power", 30);
+        "robot_base/power", 30);
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
-        "/robot_base/battery", 30);
+        "robot_base/battery", 30);
 
     cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-        "/cmd_vel", 10, // QoS History Depth
+        "cmd_vel", 10, // QoS History Depth
         std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
 
     jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-        "/robot_action/jump_to_boot", 10, // QoS History Depth
+        "robot_action/jump_to_boot", 10, // QoS History Depth
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
 
@@ -157,7 +157,7 @@ void RobotSerial::packet_callback()
 
     RCLCPP_INFO_THROTTLE(
         this->get_logger(), *this->get_clock(), 1000,
-        "Robot Feedback Data Rate: %.2f Hz | Processing Time = %.3f us",
+        "Feedback Rate: %.2f Hz | Processing Time = %.3f us",
         packet_frequency(),
         duration_cast<nanoseconds>(t_end - t_begin).count() / 1e3);
 }
@@ -167,6 +167,8 @@ void RobotSerial::reconnect_callback()
     if (!connected_)
     {
         RCLCPP_INFO(this->get_logger(), "Trying to reconnect...");
+        packet_frequency_.clear();
+        last_packet_time_ = high_resolution_clock::now();
         connect();
     }
 }
@@ -371,6 +373,10 @@ void RobotSerial::update_packet_frequency()
 
 float RobotSerial::packet_frequency()
 {
+    if (packet_frequency_.empty())
+    {
+        return 0;
+    }
     return std::accumulate(packet_frequency_.begin(), packet_frequency_.end(),
                            0.0) /
            packet_frequency_.size();
@@ -405,6 +411,12 @@ void RobotSerial::publish_data()
     publish_base_params();
     publish_power_status();
     publish_battery();
+
+    if (last_message_.has_last_command_ok())
+    {
+        RCLCPP_INFO(this->get_logger(), "Last Command ok: %d",
+                    last_message_.last_command_ok());
+    }
 
     last_message_ok_ = false;
 }
@@ -459,9 +471,12 @@ void RobotSerial::publish_odometry()
     //     last_message_.velocities().covariance().size());
 
     const auto& pose_cov_proto = last_message_.pose().covariance();
-    if (pose_cov_proto.size() == 36) {
-        std::copy(pose_cov_proto.begin(), pose_cov_proto.end(), msg.pose.covariance.begin());
-        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100, "Size of pose if correct!");
+    if (pose_cov_proto.size() == 36)
+    {
+        std::copy(pose_cov_proto.begin(), pose_cov_proto.end(),
+                  msg.pose.covariance.begin());
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100,
+        // "Size of pose if correct!");
     }
 
     msg.twist.twist.linear.x =
@@ -470,17 +485,19 @@ void RobotSerial::publish_odometry()
         last_message_.velocities().angular_trad_s() / 1000.0;
     // msg.twist.covariance = last_message_.velocities().covariance();
     const auto& twist_cov_proto = last_message_.velocities().covariance();
-    if (twist_cov_proto.size() == 36) {
-        std::copy(twist_cov_proto.begin(), twist_cov_proto.end(), msg.twist.covariance.begin());
-        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100, "Size of velocity if correct!");
+    if (twist_cov_proto.size() == 36)
+    {
+        std::copy(twist_cov_proto.begin(), twist_cov_proto.end(),
+                  msg.twist.covariance.begin());
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100,
+        // "Size of velocity if correct!");
     }
     odometry_pub_->publish(msg);
 
     // RCLCPP_INFO_THROTTLE(
     //     this->get_logger(), *this->get_clock(), 100,
-    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w: %d" ,
-    //     last_message_.pose().x_mm(),
-    //     last_message_.pose().y_mm(),
+    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w:
+    //     %d" , last_message_.pose().x_mm(), last_message_.pose().y_mm(),
     //     last_message_.pose().yaw_trad(),
     //     last_message_.velocities().linear_mm_s(),
     //     last_message_.velocities().angular_trad_s());
@@ -493,24 +510,28 @@ void RobotSerial::publish_encoders()
 
     // RCLCPP_INFO_THROTTLE(
     //     this->get_logger(), *this->get_clock(), 100,
-    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w: %d" ,
-    //     last_message_.encoder().pose_enc().x_mm(),
+    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w:
+    //     %d" , last_message_.encoder().pose_enc().x_mm(),
     //     last_message_.encoder().pose_enc().y_mm(),
     //     last_message_.encoder().pose_enc().yaw_trad(),
     //     last_message_.encoder().twist_enc().linear_mm_s(),
     //     last_message_.encoder().twist_enc().angular_trad_s());
 
-    msg.pose.pose.position.x = last_message_.encoder().pose_enc().x_mm() / 1000.0;
-    msg.pose.pose.position.y = last_message_.encoder().pose_enc().y_mm() / 1000.0;
+    msg.pose.pose.position.x =
+        last_message_.encoder().pose_enc().x_mm() / 1000.0;
+    msg.pose.pose.position.y =
+        last_message_.encoder().pose_enc().y_mm() / 1000.0;
 
     tf2::Quaternion q;
     q.setRPY(0, 0, last_message_.encoder().pose_enc().yaw_trad() / 1000.0);
     msg.pose.pose.orientation = tf2::toMsg(q);
-    
+
     msg.yaw_radians = last_message_.encoder().pose_enc().yaw_trad() / 1000.0;
 
-    msg.twist.twist.linear.x = last_message_.encoder().twist_enc().linear_mm_s() / 1000.0;
-    msg.twist.twist.angular.z = last_message_.encoder().twist_enc().angular_trad_s() / 1000.0;
+    msg.twist.twist.linear.x =
+        last_message_.encoder().twist_enc().linear_mm_s() / 1000.0;
+    msg.twist.twist.angular.z =
+        last_message_.encoder().twist_enc().angular_trad_s() / 1000.0;
 
     // Encoder - left
     data.velocity = last_message_.velocities().left_wheel_mm_s() / 1000.0;
@@ -564,8 +585,8 @@ void RobotSerial::publish_debug()
     if (last_message_.has_info() && last_message_.info().has_debug_data())
     {
         msg.ecu_debug_info = last_message_.info().debug_data();
+        debug_pub_->publish(msg);
     }
-    debug_pub_->publish(msg);
 }
 
 void RobotSerial::publish_base_params()
@@ -631,17 +652,23 @@ void RobotSerial::publish_battery()
 void RobotSerial::publish_power_status()
 {
     sd_msgs::msg::PowerStatus msg;
-    sensor_msgs::msg::Temperature data;
     msg.charging_current =
         last_message_.power_status().charging_current_ma() / 1000.f;
     msg.driver_current =
         last_message_.power_status().driver_current_ma() / 1000.f;
     msg.charger_detected = last_message_.power_status().charger_detected();
 
-    data.temperature = last_message_.power_status().temperature();
-    data.variance = 0;
+    msg.ecu_temp.temperature = last_message_.power_status().temperature();
+    msg.ecu_temp.variance = 0;
+    msg.ecu_temp.header.stamp = this->get_clock()->now();
+    msg.ecu_temp.header.frame_id = "ecu";
 
-    msg.ecu_temp = data;
+    msg.internal_temp.temperature =
+        last_message_.power_status().internal_temperature();
+    msg.internal_temp.variance = 0;
+    msg.internal_temp.header.stamp = this->get_clock()->now();
+    msg.internal_temp.header.frame_id = "mcu";
+
     power_status_pub_->publish(msg);
 }
 

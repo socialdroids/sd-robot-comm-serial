@@ -1,4 +1,5 @@
 syntax = "proto3";
+import "aux.proto";
 import "feedback.proto";
 
 enum RobotState
