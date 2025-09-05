@@ -13,12 +13,12 @@ message PowerStatus
   int32 voltage_mv = 1;
   int32 driver_current_ma = 2;
   int32 temperature = 3;
-  int32 internal_temperature = 4;
-  int32 battery_capacity = 5;
-  int32 battery_percent = 6;
-  bool charging = 7;
-  bool charger_detected = 8;
-  int32 charging_current_ma = 9;
+  int32 battery_capacity = 4;
+  int32 battery_percent = 5;
+  bool charging = 6;
+  bool charger_detected = 7;
+  int32 charging_current_ma = 8;
+  int32 internal_temperature = 9;
 }
 
 message WakeUpConfig
