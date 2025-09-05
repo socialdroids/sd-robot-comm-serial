@@ -457,6 +457,10 @@ void RobotSerial::publish_odometry()
 {
     nav_msgs::msg::Odometry msg;
 
+    msg.header.stamp = this->get_clock()->now();
+    msg.header.frame_id = "odom";
+    msg.child_frame_id = "base_footprint";
+
     msg.pose.pose.position.x = last_message_.pose().x_mm() / 1000.0;
     msg.pose.pose.position.y = last_message_.pose().y_mm() / 1000.0;
 
