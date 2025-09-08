@@ -33,33 +33,36 @@ RobotSerial::RobotSerial()
                 reconnection_freq);
     RCLCPP_INFO(this->get_logger(), "Command Update Frequency: %d Hz",
                 command_freq);
+    // Create a QoS profile for best effort reliability
+    rclcpp::QoS best_effort_qos(10); // History depth of 10
+    best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
 
     robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
-        "robot_base/flags", 200);
+        "robot_base/flags", best_effort_qos);
     imu_pub_ =
-        this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu", 200);
+        this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu", best_effort_qos);
     odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
-        "robot_base/odometry", 200);
+        "robot_base/odometry", best_effort_qos);
     encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
-        "robot_base/encoders", 200);
+        "robot_base/encoders", best_effort_qos);
     bumpers_pub_ = this->create_publisher<sd_msgs::msg::RobotBumpers>(
-        "robot_base/bumpers", 200);
+        "robot_base/bumpers", best_effort_qos);
     debug_pub_ = this->create_publisher<sd_msgs::msg::RobotDebug>(
-        "robot_base/debug", 200);
+        "robot_base/debug", best_effort_qos);
     base_params_pub_ = this->create_publisher<sd_msgs::msg::BaseParams>(
-        "robot_base/params", 30);
+        "robot_base/params", best_effort_qos);
 
     power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
-        "robot_base/power", 30);
+        "robot_base/power", best_effort_qos);
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
-        "robot_base/battery", 30);
+        "robot_base/battery", best_effort_qos);
 
     cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-        "cmd_vel", 10, // QoS History Depth
+        "cmd_vel", best_effort_qos, // QoS History Depth
         std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
 
     jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-        "robot_action/jump_to_boot", 10, // QoS History Depth
+        "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
 
@@ -110,7 +113,8 @@ void RobotSerial::jump_to_boot_callback(
 
 void RobotSerial::packet_callback()
 {
-    auto t_begin = high_resolution_clock::now();
+    auto t_begin = high_resolution_clock::now(), t_read = high_resolution_clock::now(),
+         t_decode = high_resolution_clock::now(), t_publish = high_resolution_clock::now();
     if (!connected_)
     {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
@@ -118,6 +122,7 @@ void RobotSerial::packet_callback()
         return;
     }
 
+    t_read = high_resolution_clock::now();
     this->try_serial_operation([&]() {
         size_t available_data = serial_port_->available();
 
@@ -150,16 +155,26 @@ void RobotSerial::packet_callback()
         }
         current_buffer_pos_ = aux;
     });
+    auto dt_read = high_resolution_clock::now() - t_read ;
 
+    t_decode = high_resolution_clock::now();
     decode_buffer();
+    auto dt_decode = high_resolution_clock::now() - t_decode;
+
+    t_publish = high_resolution_clock::now();
     publish_data();
+    auto dt_publish = high_resolution_clock::now() - t_publish;
+
     auto t_end = high_resolution_clock::now();
 
     RCLCPP_INFO_THROTTLE(
         this->get_logger(), *this->get_clock(), 1000,
-        "Feedback Rate: %.2f Hz | Processing Time = %.3f us",
+        "Feedback Rate: %.2f Hz | Processing Time = %.3f (%.2f, %.2f, %.2f) us",
         packet_frequency(),
-        duration_cast<nanoseconds>(t_end - t_begin).count() / 1e3);
+        duration_cast<nanoseconds>(t_end - t_begin).count() / 1e3,
+        duration_cast<nanoseconds>(dt_read).count() / 1e3,
+        duration_cast<nanoseconds>(dt_decode).count() / 1e3,
+        duration_cast<nanoseconds>(dt_publish).count() / 1e3);
 }
 
 void RobotSerial::reconnect_callback()
