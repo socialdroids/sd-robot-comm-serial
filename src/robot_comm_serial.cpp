@@ -168,7 +168,7 @@ void RobotSerial::packet_callback()
     auto t_end = high_resolution_clock::now();
 
     RCLCPP_INFO_THROTTLE(
-        this->get_logger(), *this->get_clock(), 1000,
+        this->get_logger(), *this->get_clock(), 60000,
         "Feedback Rate: %.2f Hz | Processing Time = %.3f (%.2f, %.2f, %.2f) us",
         packet_frequency(),
         duration_cast<nanoseconds>(t_end - t_begin).count() / 1e3,
