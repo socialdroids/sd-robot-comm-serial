@@ -124,6 +124,7 @@ private:
     bool last_message_ok_;
 
     bool fake_charging_;
+    float fake_charging_radius_;
     uint8_t fake_charging_fail_count_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

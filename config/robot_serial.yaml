@@ -9,3 +9,4 @@ command_frequency: 100 # [Hz]
 
 # Custom function
 fake_charging: True
+fake_charging_radius: 0.5 # [m]

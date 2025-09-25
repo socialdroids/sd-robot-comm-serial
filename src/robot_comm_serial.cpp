@@ -1,5 +1,6 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
+#include <cmath>
 #include <cstring>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
@@ -24,6 +25,7 @@ RobotSerial::RobotSerial()
         yaml_get_value<int>(config, "reconnection_frequency");
     int command_freq = yaml_get_value<int>(config, "command_frequency");
     fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
+    fake_charging_radius_ = yaml_get_value<double>(config, "fake_charging_radius");
     fake_charging_fail_count_ = 0;
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
@@ -720,8 +722,13 @@ bool RobotSerial::fake_charging_status()
     // double qz = transform_stamped.transform.rotation.z;
     // double qw = transform_stamped.transform.rotation.w;
 
-    RCLCPP_INFO(this->get_logger(),
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                 "Robot position in map frame: x=%.2f, y=%.2f, z=%.2f", x, y, z);
+
+    if (sqrt(x*x + y*y) < fake_charging_radius_)
+    {
+        return true;
+    }
 
     return false;
 }
