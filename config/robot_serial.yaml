@@ -6,3 +6,6 @@ baud_rate: 1000000
 reception_frequency: 500 # [Hz]
 reconnection_frequency: 1 # [Hz]
 command_frequency: 100 # [Hz]
+
+# Custom function
+fake_charging: True

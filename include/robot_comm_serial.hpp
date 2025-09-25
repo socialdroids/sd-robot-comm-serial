@@ -26,6 +26,11 @@
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include <yaml-cpp/yaml.h>
 
+// Para ler a pose do robô
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+
 // ROS messages
 #include "sd_msgs/msg/base_params.hpp"
 #include "sd_msgs/msg/build_info.hpp"
@@ -118,6 +123,11 @@ private:
     CommandMessage last_command_;
     bool last_message_ok_;
 
+    bool fake_charging_;
+    uint8_t fake_charging_fail_count_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
     unsigned long baud_;
     std::string port_;
     bool connected_;
@@ -148,6 +158,15 @@ private:
     void publish_debug();
     void publish_base_params();
     void publish_battery();
+
+    /**
+     * @brief Determina o estado de carregamento fake baseado na distância para
+     * a origem do mapa (base)
+     *
+     * @return True se estiver perto da base, False se não estiver ou se o fake
+     * charging estiver desabilitado
+     */
+    bool fake_charging_status();
 
     template <typename Func> void try_serial_operation(Func&& func)
     {

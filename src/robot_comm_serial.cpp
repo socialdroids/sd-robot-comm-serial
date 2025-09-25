@@ -23,6 +23,8 @@ RobotSerial::RobotSerial()
     int reconnection_freq =
         yaml_get_value<int>(config, "reconnection_frequency");
     int command_freq = yaml_get_value<int>(config, "command_frequency");
+    fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
+    fake_charging_fail_count_ = 0;
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
@@ -33,14 +35,16 @@ RobotSerial::RobotSerial()
                 reconnection_freq);
     RCLCPP_INFO(this->get_logger(), "Command Update Frequency: %d Hz",
                 command_freq);
+    RCLCPP_INFO(this->get_logger(), "Use Fake Charging: %d", fake_charging_);
+
     // Create a QoS profile for best effort reliability
     rclcpp::QoS best_effort_qos(10); // History depth of 10
     best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
 
     robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
         "robot_base/flags", best_effort_qos);
-    imu_pub_ =
-        this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu", best_effort_qos);
+    imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
+                                                             best_effort_qos);
     odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
         "robot_base/odometry", best_effort_qos);
     encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
@@ -78,6 +82,9 @@ RobotSerial::RobotSerial()
         std::chrono::milliseconds((int)(1e3 / command_freq)),
         std::bind(&RobotSerial::command_callback, this));
 
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
     last_message_ = FeedbackMessage();
     VelocityCommand* velocity = last_command_.mutable_velocities();
     velocity->set_angular(0);
@@ -113,8 +120,10 @@ void RobotSerial::jump_to_boot_callback(
 
 void RobotSerial::packet_callback()
 {
-    auto t_begin = high_resolution_clock::now(), t_read = high_resolution_clock::now(),
-         t_decode = high_resolution_clock::now(), t_publish = high_resolution_clock::now();
+    auto t_begin = high_resolution_clock::now(),
+         t_read = high_resolution_clock::now(),
+         t_decode = high_resolution_clock::now(),
+         t_publish = high_resolution_clock::now();
     if (!connected_)
     {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
@@ -155,7 +164,7 @@ void RobotSerial::packet_callback()
         }
         current_buffer_pos_ = aux;
     });
-    auto dt_read = high_resolution_clock::now() - t_read ;
+    auto dt_read = high_resolution_clock::now() - t_read;
 
     t_decode = high_resolution_clock::now();
     decode_buffer();
@@ -654,7 +663,7 @@ void RobotSerial::publish_battery()
 
     msg.power_supply_status =
         sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_DISCHARGING;
-    if (last_message_.power_status().charging())
+    if (last_message_.power_status().charging() || fake_charging_status())
     {
         msg.power_supply_status =
             sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_CHARGING;
@@ -666,6 +675,55 @@ void RobotSerial::publish_battery()
         sensor_msgs::msg::BatteryState::POWER_SUPPLY_HEALTH_UNKNOWN;
     msg.present = true;
     battery_pub_->publish(msg);
+}
+
+bool RobotSerial::fake_charging_status()
+{
+    if (!fake_charging_)
+    {
+        return false;
+    }
+    if (fake_charging_fail_count_ > 200)
+    {
+        RCLCPP_INFO_ONCE(this->get_logger(),
+                         "Stopping fake charging behavior due to unpublished "
+                         "base_link to map transform");
+        return false;
+    }
+
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 300,
+                         "Using fake charging!");
+
+    geometry_msgs::msg::TransformStamped transform_stamped;
+    try
+    {
+        // tf2::TimePointZero for latest available transform
+        transform_stamped =
+            tf_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
+    }
+    catch (tf2::TransformException& ex)
+    {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 300,
+                             "%d) Could not transform 'base_link' to 'map'! %s",
+                             fake_charging_fail_count_++, ex.what());
+
+        return false;
+    }
+
+    // Extract position and orientation from the transform
+    double x = transform_stamped.transform.translation.x;
+    double y = transform_stamped.transform.translation.y;
+    double z = transform_stamped.transform.translation.z;
+
+    // double qx = transform_stamped.transform.rotation.x;
+    // double qy = transform_stamped.transform.rotation.y;
+    // double qz = transform_stamped.transform.rotation.z;
+    // double qw = transform_stamped.transform.rotation.w;
+
+    RCLCPP_INFO(this->get_logger(),
+                "Robot position in map frame: x=%.2f, y=%.2f, z=%.2f", x, y, z);
+
+    return false;
 }
 
 void RobotSerial::publish_power_status()
