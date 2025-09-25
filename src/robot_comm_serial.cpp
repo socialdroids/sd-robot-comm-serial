@@ -687,7 +687,7 @@ bool RobotSerial::fake_charging_status()
     }
     if (fake_charging_fail_count_ > 200)
     {
-        RCLCPP_INFO_ONCE(this->get_logger(),
+        RCLCPP_ERROR_ONCE(this->get_logger(),
                          "Stopping fake charging behavior due to unpublished "
                          "base_link to map transform");
         return false;
@@ -722,7 +722,7 @@ bool RobotSerial::fake_charging_status()
     // double qz = transform_stamped.transform.rotation.z;
     // double qw = transform_stamped.transform.rotation.w;
 
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                 "Robot position in map frame: x=%.2f, y=%.2f, z=%.2f", x, y, z);
 
     if (sqrt(x*x + y*y) < fake_charging_radius_)
