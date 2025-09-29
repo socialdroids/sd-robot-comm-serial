@@ -693,7 +693,7 @@ bool RobotSerial::fake_charging_status()
         return false;
     }
 
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 300,
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 120000,
                          "Using fake charging!");
 
     geometry_msgs::msg::TransformStamped transform_stamped;
