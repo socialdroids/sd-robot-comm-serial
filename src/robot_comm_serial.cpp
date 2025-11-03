@@ -25,7 +25,8 @@ RobotSerial::RobotSerial()
         yaml_get_value<int>(config, "reconnection_frequency");
     int command_freq = yaml_get_value<int>(config, "command_frequency");
     fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
-    fake_charging_radius_ = yaml_get_value<double>(config, "fake_charging_radius");
+    fake_charging_radius_ =
+        yaml_get_value<double>(config, "fake_charging_radius");
     fake_charging_fail_count_ = 0;
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
@@ -97,10 +98,37 @@ RobotSerial::RobotSerial()
     current_buffer_pos_ = 0;
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
+
+    std::string docroot = "";
+
+    // Se o caminho não foi fornecido, tenta encontrar automaticamente
+    if (docroot.empty())
+    {
+        try
+        {
+            docroot = ament_index_cpp::get_package_share_directory(
+                          "robot_comm_serial") +
+                      "/web";
+        }
+        catch (const std::exception& e)
+        {
+            RCLCPP_ERROR(this->get_logger(),
+                         "Falha ao encontrar o docroot. Especifique "
+                         "'docroot_path'. Erro: %s",
+                         e.what());
+            rclcpp::shutdown();
+            return;
+        }
+    }
+    RCLCPP_INFO(this->get_logger(), "Servindo arquivos da web de: %s",
+                docroot.c_str());
+    ws_interface_ = std::make_unique<WebsocketInterface>(9002, docroot);
+    ws_interface_->run();
 }
 
 RobotSerial::~RobotSerial()
 {
+    ws_interface_->stop();
 }
 
 void RobotSerial::cmd_vel_callback(
@@ -605,6 +633,13 @@ void RobotSerial::publish_bumpers()
         data.status = last_message_.bumpers(n).status();
         data.bumper_id = last_message_.bumpers(n).id();
         msg.bumper_data.push_back(data);
+        json j;
+        j["type"] = "sensor_update";
+        j["sensor"] = "bumper";
+        j["id"] = data.bumper_id;
+        j["value"] = data.status;
+
+        ws_interface_->send_robot_status(j);
     }
     bumpers_pub_->publish(msg);
 }
@@ -615,6 +650,7 @@ void RobotSerial::publish_debug()
     if (last_message_.has_info() && last_message_.info().has_debug_data())
     {
         msg.ecu_debug_info = last_message_.info().debug_data();
+        ws_interface_->send_log(msg.ecu_debug_info);
         debug_pub_->publish(msg);
     }
 }
@@ -688,8 +724,8 @@ bool RobotSerial::fake_charging_status()
     if (fake_charging_fail_count_ > 200)
     {
         RCLCPP_ERROR_ONCE(this->get_logger(),
-                         "Stopping fake charging behavior due to unpublished "
-                         "base_link to map transform");
+                          "Stopping fake charging behavior due to unpublished "
+                          "base_link to map transform");
         return false;
     }
 
@@ -723,9 +759,10 @@ bool RobotSerial::fake_charging_status()
     // double qw = transform_stamped.transform.rotation.w;
 
     RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                "Robot position in map frame: x=%.2f, y=%.2f, z=%.2f", x, y, z);
+                          "Robot position in map frame: x=%.2f, y=%.2f, z=%.2f",
+                          x, y, z);
 
-    if (sqrt(x*x + y*y) < fake_charging_radius_)
+    if (sqrt(x * x + y * y) < fake_charging_radius_)
     {
         return true;
     }

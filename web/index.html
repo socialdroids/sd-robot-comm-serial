@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle do Robô</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Painel de Controle do Robô</h1>
+        <div id="connection-status" class="status-disconnected">DESCONECTADO</div>
+    </header>
+    <main class="container">
+        <div class="card">
+            <h2><span class="emoji">📊</span> Status em Tempo Real</h2>
+            <div class="data-grid">
+                <span>Velocidade Linear:</span> <span id="val-linear-vel">0.00</span> m/s
+                <span>Velocidade Angular:</span> <span id="val-angular-vel">0.00</span> rad/s
+                <span>Setpoint Linear:</span> <span id="val-setpoint-linear">0.00</span> m/s
+                <span>Setpoint Angular:</span> <span id="val-setpoint-angular">0.00</span> rad/s
+                <span>Sensor de Corrente A:</span> <span id="val-current-a">0.00</span> A
+                <span>Sensor de Corrente B:</span> <span id="val-current-b">0.00</span> A
+                <span>Bumper:</span> <span id="val-bumper">Inativo</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2><span class="emoji">⚙️</span> Configuração</h2>
+            <form id="pid-form">
+                <h3>Controle PID</h3>
+                <div class="form-group">
+                    <label for="pid-p">P:</label>
+                    <input type="number" id="pid-p" step="0.01" value="1.0">
+                    <label for="pid-i">I:</label>
+                    <input type="number" id="pid-i" step="0.01" value="0.1">
+                    <label for="pid-d">D:</label>
+                    <input type="number" id="pid-d" step="0.01" value="0.05">
+                </div>
+                <button type="submit">Atualizar PID</button>
+            </form>
+            <hr>
+            <form id="speed-form">
+                <h3>Limites de Velocidade</h3>
+                <div class="form-group">
+                    <label for="max-vel">Vel. Máx (m/s):</label>
+                    <input type="number" id="max-vel" step="0.1" value="1.5">
+                    <label for="max-acc">Acel. Máx (m/s²):</label>
+                    <input type="number" id="max-acc" step="0.1" value="0.5">
+                </div>
+                <button type="submit">Atualizar Limites</button>
+            </form>
+        </div>
+
+        <div class="card full-width">
+            <h2><span class="emoji">📜</span> Log do Servidor</h2>
+            <div id="log-messages"></div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

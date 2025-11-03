@@ -19,6 +19,8 @@
 #include "std_msgs/msg/int32_multi_array.hpp"
 #include "std_msgs/msg/bool.hpp"
 
+#include "websocket_interface.hpp"
+
 #include "cobs.h"
 #include "command.pb.h"
 #include "feedback.pb.h"
@@ -107,6 +109,8 @@ private:
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
     rclcpp::TimerBase::SharedPtr command_timer_;
+
+    std::unique_ptr<WebsocketInterface> ws_interface_;
 
     size_t packet_size_;
     uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];

@@ -14,12 +14,35 @@ endif()
 
 include(FetchContent)
 
+# --- YAML CPP
 FetchContent_Declare(
   yaml-cpp
   GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
   GIT_TAG yaml-cpp-0.7.0 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
 )
 FetchContent_MakeAvailable(yaml-cpp)
+
+# --- 
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
+# --- Websocket++
+# === boost ===
+find_package(Boost REQUIRED COMPONENTS filesystem system thread regex)
+
+FetchContent_Declare(websocketpp
+GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+  GIT_TAG 0.8.2)
+FetchContent_GetProperties(websocketpp)
+if(NOT websocketpp_POPULATED)
+  FetchContent_Populate(websocketpp)
+  add_subdirectory(${websocketpp_SOURCE_DIR} ${websocketpp_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+# add interface library with all websocketpp dependencies
+add_library(Websockets INTERFACE)
+target_include_directories(Websockets INTERFACE ${websocketpp_SOURCE_DIR})
+target_link_libraries(Websockets INTERFACE Boost::system Boost::thread Boost::regex)
+# ----------------------------------------------------------------------------
 
 
 find_package(ament_cmake REQUIRED)
@@ -86,10 +109,10 @@ message("Protofiles OK!")
 add_subdirectory(cmake/serial)
 
 # add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
-add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/cobs.c)
+add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c)
 
-target_link_libraries(${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES} serial 
-    yaml-cpp::yaml-cpp)
+target_link_libraries(${PROJECT_NAME} Websockets proto_lib ${Protobuf_LIBRARIES} serial 
+    yaml-cpp::yaml-cpp nlohmann_json::nlohmann_json)
 
 ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 
@@ -143,9 +166,9 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-# Install YAML Config files
+# Install YAML Config files, Web files
 install(DIRECTORY
-  config
+  config web
   DESTINATION share/${PROJECT_NAME}
 )
 
