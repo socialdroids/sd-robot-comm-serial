@@ -296,6 +296,11 @@ void RobotSerial::clear_command()
     {
         last_command_.clear_actions();
     }
+
+    if (last_command_.has_config())
+    {
+        last_command_.clear_config();
+    }
 }
 
 void RobotSerial::connect()
@@ -476,6 +481,7 @@ void RobotSerial::publish_data()
     publish_base_params();
     publish_power_status();
     publish_battery();
+    publish_robot_config();
 
     if (last_message_.has_last_command_ok())
     {
@@ -717,6 +723,29 @@ void RobotSerial::publish_battery()
     battery_pub_->publish(msg);
 }
 
+void RobotSerial::publish_robot_config()
+{
+    if (last_message_.has_parameters())
+    {
+        RCLCPP_INFO(this->get_logger(), "LEFT (P=%.2f, I=%.2f, D=%.2f)",
+                    last_message_.parameters().left_pid().k_p(),
+                    last_message_.parameters().left_pid().k_i(),
+                    last_message_.parameters().left_pid().k_d());
+        RCLCPP_INFO(this->get_logger(), "RIGHT (P=%.2f, I=%.2f, D=%.2f)",
+                    last_message_.parameters().right_pid().k_p(),
+                    last_message_.parameters().right_pid().k_i(),
+                    last_message_.parameters().right_pid().k_d());
+        RCLCPP_INFO(this->get_logger(), "LINEAR (P=%.2f, I=%.2f, D=%.2f)",
+                    last_message_.parameters().linear_pid().k_p(),
+                    last_message_.parameters().linear_pid().k_i(),
+                    last_message_.parameters().linear_pid().k_d());
+        RCLCPP_INFO(this->get_logger(), "ANGULAR (P=%.2f, I=%.2f, D=%.2f)\n",
+                    last_message_.parameters().angular_pid().k_p(),
+                    last_message_.parameters().angular_pid().k_i(),
+                    last_message_.parameters().angular_pid().k_d());
+    }
+}
+
 bool RobotSerial::fake_charging_status()
 {
     if (!fake_charging_)
@@ -781,21 +810,6 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     if (type == "get_ecu_info")
     {
         update_ecu_info("", "", "", "", "", "", "", "", 0, 0);
-        // json info;
-        // info["type"] = "ecu_info";
-        // // info["info"] = {
-        // //     {"robot_name", "RobôZin"},   {"ecu_version", "2.1.0"},
-        // //     {"driver_version", "1.5.2"}, {"motor_version", "3.0"},
-        // //     {"wheel_distance", 0.45},    {"wheel_diameter", 0.15},
-        // //     {"git_hash", "a1b2c3d4"},    {"git_branch", "main"},
-        // //     {"git_tag", "v2.1.0-rc1"},   {"build_date", "2025-11-04"}};
-        // info["info"] = {{"robot_name", ""},     {"ecu_version", ""},
-        //                 {"driver_version", ""}, {"motor_version", ""},
-        //                 {"wheel_distance", 0},  {"wheel_diameter", 0},
-        //                 {"git_hash", ""},       {"git_branch", ""},
-        //                 {"git_tag", ""},        {"build_date", ""}};
-        // ws_interface_->send_robot_status(info); // Reutiliza o método de
-        // envio
     }
     else if (type == "get_all_configs")
     {
@@ -807,7 +821,8 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
              {
                  {"linear", {{"p", 1.0}, {"i", 0.1}, {"d", 0.05}}},
                  {"angular", {{"p", 2.0}, {"i", 0.2}, {"d", 0.1}}},
-                 // ... (wheel_left, wheel_right)
+                 {"left", {{"p", 1.0}, {"i", 0.0}, {"d", 0.0}}},
+                 {"right", {{"p", 1.0}, {"i", 0.0}, {"d", 0.0}}}
              }},
             {"limits",
              {{"linear_vel", 1.5},
@@ -834,9 +849,42 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     {
         std::string target = data.at("target");
         double p = data.at("p");
-        RCLCPP_INFO(this->get_logger(), "Configurando PID para %s: P=%.2f",
-                    target.c_str(), p);
-        // TODO: Aplicar os parâmetros (ex: via set_parameter ou serviço)
+        double i = data.at("i");
+        double d = data.at("d");
+        RCLCPP_INFO(this->get_logger(),
+                    "Configurando PID para %s: P=%.2f I=%.2f D=%.2f",
+                    target.c_str(), p, i, d);
+
+        RobotConfig* config = last_command_.mutable_config();
+        RobotParameters* parameters = config->mutable_parameters();
+        if (target == "linear")
+        {
+            PIDConfig* cfg = parameters->mutable_linear_pid();
+            cfg->set_k_p(p);
+            cfg->set_k_i(i);
+            cfg->set_k_d(d);
+        }
+        else if (target == "angular")
+        {
+            PIDConfig* cfg = parameters->mutable_angular_pid();
+            cfg->set_k_p(p);
+            cfg->set_k_i(i);
+            cfg->set_k_d(d);
+        }
+        else if (target == "left")
+        {
+            PIDConfig* cfg = parameters->mutable_left_pid();
+            cfg->set_k_p(p);
+            cfg->set_k_i(i);
+            cfg->set_k_d(d);
+        }
+        else if (target == "right")
+        {
+            PIDConfig* cfg = parameters->mutable_right_pid();
+            cfg->set_k_p(p);
+            cfg->set_k_i(i);
+            cfg->set_k_d(d);
+        }
     }
     else if (type == "set_limits")
     {
@@ -926,10 +974,13 @@ void RobotSerial::publish_full_status()
                           {"right_pulses", last_message_.encoder().right()}};
     status["gauges"] = {
         {"battery_level", last_message_.power_status().battery_percent()},
-        {"motor_current_left", last_message_.power_status().driver_current_ma() / 1000.f},
+        {"motor_current_left",
+         last_message_.power_status().driver_current_ma() / 1000.f},
         {"motor_current_right", 0.0},
-        {"charging_status", last_message_.power_status().charging() ? "idle" : "discharging"},
-        {"charging_current", last_message_.power_status().charging_current_ma() / 1000.f},
+        {"charging_status",
+         last_message_.power_status().charging() ? "idle" : "discharging"},
+        {"charging_current",
+         last_message_.power_status().charging_current_ma() / 1000.f},
         {"temp_ecu", last_message_.power_status().temperature()},
         {"temp_mcu", last_message_.power_status().internal_temperature()}};
 

@@ -565,7 +565,7 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         
         // PIDs
         if (configs.pid) {
-            ['linear', 'angular', 'wheel_left', 'wheel_right'].forEach(target => {
+            ['linear', 'angular', 'left', 'right'].forEach(target => {
                 if (configs.pid[target]) {
                     document.getElementById(`pid-${target}-p`).value = configs.pid[target].p;
                     document.getElementById(`pid-${target}-i`).value = configs.pid[target].i;
