@@ -17,6 +17,7 @@ RobotSerial::RobotSerial()
     RCLCPP_INFO(this->get_logger(), "Loading Config File: %s",
                 config_file.c_str());
 
+    // === CONFIGURAÇÕES
     YAML::Node config = YAML::LoadFile(config_file);
     port_ = yaml_get_value<std::string>(config, "serial_port");
     baud_ = yaml_get_value<unsigned long>(config, "baud_rate");
@@ -40,6 +41,7 @@ RobotSerial::RobotSerial()
                 command_freq);
     RCLCPP_INFO(this->get_logger(), "Use Fake Charging: %d", fake_charging_);
 
+    // === TÓPICOS
     // Create a QoS profile for best effort reliability
     rclcpp::QoS best_effort_qos(10); // History depth of 10
     best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
@@ -85,6 +87,11 @@ RobotSerial::RobotSerial()
         std::chrono::milliseconds((int)(1e3 / command_freq)),
         std::bind(&RobotSerial::command_callback, this));
 
+    const int gui_frequency = 60;
+    gui_update_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds((int)(1e3 / gui_frequency)),
+        std::bind(&RobotSerial::publish_full_status, this));
+
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
@@ -99,6 +106,7 @@ RobotSerial::RobotSerial()
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
 
+    // === WEBSOCKET
     std::string docroot = "";
 
     // Se o caminho não foi fornecido, tenta encontrar automaticamente
@@ -123,6 +131,9 @@ RobotSerial::RobotSerial()
     RCLCPP_INFO(this->get_logger(), "Servindo arquivos da web de: %s",
                 docroot.c_str());
     ws_interface_ = std::make_unique<WebsocketInterface>(9002, docroot);
+
+    ws_interface_->register_command_callback(
+        std::bind(&RobotSerial::handle_gui_command, this, _1, _2));
     ws_interface_->run();
 }
 
@@ -523,18 +534,11 @@ void RobotSerial::publish_odometry()
     msg.pose.pose.orientation = tf2::toMsg(q);
     // msg.pose.covariance = last_message_.pose().covariance();
 
-    // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-    //     "Received covariance sizes: POSE=%d, TWIST=%d",
-    //     last_message_.pose().covariance().size(),
-    //     last_message_.velocities().covariance().size());
-
     const auto& pose_cov_proto = last_message_.pose().covariance();
     if (pose_cov_proto.size() == 36)
     {
         std::copy(pose_cov_proto.begin(), pose_cov_proto.end(),
                   msg.pose.covariance.begin());
-        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100,
-        // "Size of pose if correct!");
     }
 
     msg.twist.twist.linear.x =
@@ -547,18 +551,8 @@ void RobotSerial::publish_odometry()
     {
         std::copy(twist_cov_proto.begin(), twist_cov_proto.end(),
                   msg.twist.covariance.begin());
-        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100,
-        // "Size of velocity if correct!");
     }
     odometry_pub_->publish(msg);
-
-    // RCLCPP_INFO_THROTTLE(
-    //     this->get_logger(), *this->get_clock(), 100,
-    //     "Robot Feedback Pose | X: %ld | Y: %ld | Theta: %d | V_x: %d | V_w:
-    //     %d" , last_message_.pose().x_mm(), last_message_.pose().y_mm(),
-    //     last_message_.pose().yaw_trad(),
-    //     last_message_.velocities().linear_mm_s(),
-    //     last_message_.velocities().angular_trad_s());
 }
 
 void RobotSerial::publish_encoders()
@@ -633,13 +627,13 @@ void RobotSerial::publish_bumpers()
         data.status = last_message_.bumpers(n).status();
         data.bumper_id = last_message_.bumpers(n).id();
         msg.bumper_data.push_back(data);
-        json j;
-        j["type"] = "sensor_update";
-        j["sensor"] = "bumper";
-        j["id"] = data.bumper_id;
-        j["value"] = data.status;
-
-        ws_interface_->send_robot_status(j);
+        // json j;
+        // j["type"] = "sensor_update";
+        // j["sensor"] = "bumper";
+        // j["id"] = data.bumper_id;
+        // j["value"] = data.status;
+        //
+        // ws_interface_->send_robot_status(j);
     }
     bumpers_pub_->publish(msg);
 }
@@ -678,8 +672,16 @@ void RobotSerial::publish_base_params()
         // msg.robot_name =
         // last_message_.info().hardware_info().motor_version();
         msg.robot_name = last_message_.info().hardware_info().robot_name();
-        msg.wheel_distance = last_message_.info().wheel_distance_mm();
-        msg.wheel_diameter = last_message_.info().wheel_diameter_mm();
+        msg.wheel_distance = last_message_.info().wheel_distance_mm() / 1000.f;
+        msg.wheel_diameter = last_message_.info().wheel_diameter_mm() / 1000.f;
+
+        update_ecu_info(msg.robot_name,
+                        last_message_.info().hardware_info().driver_version(),
+                        last_message_.info().hardware_info().ecu_version(),
+                        last_message_.info().hardware_info().motor_version(),
+                        msg.build_data.commit_hash, msg.build_data.branch_name,
+                        msg.build_data.tag, msg.build_data.build_date,
+                        msg.wheel_distance, msg.wheel_diameter);
     }
 
     base_params_pub_->publish(msg);
@@ -768,6 +770,182 @@ bool RobotSerial::fake_charging_status()
     }
 
     return false;
+}
+
+void RobotSerial::handle_gui_command(const std::string& type, const json& data)
+{
+    RCLCPP_INFO(this->get_logger(), "Comando recebido da GUI: %s",
+                type.c_str());
+
+    // --- Responde a solicitações GET ---
+    if (type == "get_ecu_info")
+    {
+        update_ecu_info("", "", "", "", "", "", "", "", 0, 0);
+        // json info;
+        // info["type"] = "ecu_info";
+        // // info["info"] = {
+        // //     {"robot_name", "RobôZin"},   {"ecu_version", "2.1.0"},
+        // //     {"driver_version", "1.5.2"}, {"motor_version", "3.0"},
+        // //     {"wheel_distance", 0.45},    {"wheel_diameter", 0.15},
+        // //     {"git_hash", "a1b2c3d4"},    {"git_branch", "main"},
+        // //     {"git_tag", "v2.1.0-rc1"},   {"build_date", "2025-11-04"}};
+        // info["info"] = {{"robot_name", ""},     {"ecu_version", ""},
+        //                 {"driver_version", ""}, {"motor_version", ""},
+        //                 {"wheel_distance", 0},  {"wheel_diameter", 0},
+        //                 {"git_hash", ""},       {"git_branch", ""},
+        //                 {"git_tag", ""},        {"build_date", ""}};
+        // ws_interface_->send_robot_status(info); // Reutiliza o método de
+        // envio
+    }
+    else if (type == "get_all_configs")
+    {
+        json configs;
+        configs["type"] = "current_configs";
+        // Preenche com os valores atuais do robô (ex: lendo parâmetros ROS)
+        configs["configs"] = {
+            {"pid",
+             {
+                 {"linear", {{"p", 1.0}, {"i", 0.1}, {"d", 0.05}}},
+                 {"angular", {{"p", 2.0}, {"i", 0.2}, {"d", 0.1}}},
+                 // ... (wheel_left, wheel_right)
+             }},
+            {"limits",
+             {{"linear_vel", 1.5},
+              {"linear_acc", 0.5},
+              {"angular_vel", 1.0},
+              {"angular_acc", 0.8}}},
+            {"open_loop", false},
+            {"kalman",
+             {// Matriz 5x5 identidade de exemplo
+              {"model",
+               {{1, 0, 0, 0, 0},
+                {0, 1, 0, 0, 0},
+                {0, 0, 1, 0, 0},
+                {0, 0, 0, 1, 0},
+                {0, 0, 0, 0, 1}}},
+              // Matriz 4x4 identidade de exemplo
+              {"measurement",
+               {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}}}}};
+        ws_interface_->send_robot_status(configs);
+    }
+
+    // --- Lida com comandos SET ---
+    else if (type == "set_pid")
+    {
+        std::string target = data.at("target");
+        double p = data.at("p");
+        RCLCPP_INFO(this->get_logger(), "Configurando PID para %s: P=%.2f",
+                    target.c_str(), p);
+        // TODO: Aplicar os parâmetros (ex: via set_parameter ou serviço)
+    }
+    else if (type == "set_limits")
+    {
+        double linear_vel = data.at("linear_vel");
+        RCLCPP_INFO(this->get_logger(), "Configurando limite linear_vel: %.2f",
+                    linear_vel);
+        // TODO: Aplicar os limites
+    }
+    else if (type == "set_kalman_cov")
+    {
+        // As matrizes estão em data["model"] (5x5) e data["measurement"] (4x4)
+        // Você pode acessá-las como: json model_matrix = data.at("model");
+        // double val_0_0 = model_matrix[0][0];
+        RCLCPP_INFO(this->get_logger(), "Configurando matrizes Kalman.");
+        // TODO: Aplicar as matrizes
+    }
+    else if (type == "set_open_loop")
+    {
+        bool enabled = data.at("enabled");
+        RCLCPP_INFO(this->get_logger(), "Modo Malha Aberta: %s",
+                    enabled ? "ON" : "OFF");
+        // TODO: Aplicar o modo
+    }
+}
+
+void RobotSerial::update_ecu_info(
+    const std::string& _name, const std::string& _driver_version,
+    const std::string& _ecu_version, const std::string& _motor_version,
+    const std::string& _git_hash, const std::string& _git_branch,
+    const std::string& _git_tag, const std::string& _build_date,
+    float _wheel_distance, float _wheel_diameter)
+{
+    json info;
+    info["type"] = "ecu_info";
+    info["info"] = {{"robot_name", _name},
+                    {"ecu_version", _ecu_version},
+                    {"driver_version", _driver_version},
+                    {"motor_version", _motor_version},
+                    {"wheel_distance", _wheel_distance},
+                    {"wheel_diameter", _wheel_diameter},
+                    {"git_hash", _git_hash},
+                    {"git_branch", _git_branch},
+                    {"git_tag", _git_tag},
+                    {"build_date", _build_date}};
+    ws_interface_->send_robot_status(info); // Reutiliza o método de envio
+}
+
+void RobotSerial::publish_full_status()
+{
+    if (!connected_)
+    {
+        return;
+    }
+
+    json status;
+    status["type"] = "full_status";
+
+    // Pega o tempo atual (exemplo, idealmente usar o 'now()' do nó)
+    double timestamp = this->get_clock()->now().seconds();
+    status["timestamp"] = timestamp;
+
+    // Dados Fictícios - Substitua pelos seus dados reais de tópicos/variáveis
+    status["velocity"] = {
+        {"fusion",
+         {{"linear", last_message_.velocities().linear_mm_s() / 1000.0},
+          {"angular", last_message_.velocities().angular_trad_s() / 1000.0}}},
+        {"encoder",
+         {{"linear",
+           last_message_.encoder().twist_enc().linear_mm_s() / 1000.0},
+          {"angular",
+           last_message_.encoder().twist_enc().angular_trad_s() / 1000.0}}},
+        {"imu", {{"angular", last_message_.imu().gyro().z() / 1000.f}}}};
+
+    status["setpoints"] = {
+        {"linear", last_command_.velocities().linear() / 1000.f},
+        {"angular", last_command_.velocities().angular() / 1000.f}};
+
+    status["acceleration"] = {{"x", last_message_.imu().acc().x() / 1000.f},
+                              {"y", last_message_.imu().acc().y() / 1000.f},
+                              {"z", last_message_.imu().acc().z() / 1000.f}};
+
+    status["pose"] = {{"x", last_message_.pose().x_mm() / 1000.0},
+                      {"y", last_message_.pose().y_mm() / 1000.0},
+                      {"theta", last_message_.pose().yaw_trad() / 1000.0}};
+
+    status["encoders"] = {{"left_pulses", last_message_.encoder().left()},
+                          {"right_pulses", last_message_.encoder().right()}};
+    status["gauges"] = {
+        {"battery_level", last_message_.power_status().battery_percent()},
+        {"motor_current_left", last_message_.power_status().driver_current_ma() / 1000.f},
+        {"motor_current_right", 0.0},
+        {"charging_status", last_message_.power_status().charging() ? "idle" : "discharging"},
+        {"charging_current", last_message_.power_status().charging_current_ma() / 1000.f},
+        {"temp_ecu", last_message_.power_status().temperature()},
+        {"temp_mcu", last_message_.power_status().internal_temperature()}};
+
+    bool bpFL = false, bpFR = false, bpBL = false, bpBR = false;
+    if (last_message_.bumpers_size() > 3)
+    {
+        bpFL = last_message_.bumpers(0).status();
+        bpFR = last_message_.bumpers(1).status();
+        bpBL = last_message_.bumpers(2).status();
+        bpBR = last_message_.bumpers(3).status();
+    }
+    status["status_flags"] = {
+        {"estop", last_message_.emergency_button_pressed()},
+        {"bumpers", {{"fl", bpFL}, {"fr", bpFR}, {"bl", bpBL}, {"br", bpBR}}}};
+
+    ws_interface_->send_robot_status(status);
 }
 
 void RobotSerial::publish_power_status()

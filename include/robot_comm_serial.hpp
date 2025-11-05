@@ -8,16 +8,16 @@
 #include <serial/serial.h>
 #include <string.h>
 
+#include "builtin_interfaces/msg/time.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include "builtin_interfaces/msg/time.hpp"
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
-#include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/battery_state.hpp"
-#include "std_msgs/msg/int32_multi_array.hpp"
+#include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/int32_multi_array.hpp"
 
 #include "websocket_interface.hpp"
 
@@ -29,9 +29,9 @@
 #include <yaml-cpp/yaml.h>
 
 // Para ler a pose do robô
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include <geometry_msgs/msg/transform_stamped.hpp>
 
 // ROS messages
 #include "sd_msgs/msg/base_params.hpp"
@@ -109,6 +109,7 @@ private:
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
     rclcpp::TimerBase::SharedPtr command_timer_;
+    rclcpp::TimerBase::SharedPtr gui_update_timer_;
 
     std::unique_ptr<WebsocketInterface> ws_interface_;
 
@@ -172,6 +173,21 @@ private:
      * charging estiver desabilitado
      */
     bool fake_charging_status();
+
+    /**
+     * @brief Lida com os comandos da Web gUI
+     *
+     * @param type Tipo de comando
+     * @param data Dados
+     */
+    void handle_gui_command(const std::string& type, const json& data);
+    void update_ecu_info(
+        const std::string& _name, const std::string& _driver_version,
+        const std::string& _ecu_version, const std::string& _motor_version,
+        const std::string& _git_hash, const std::string& _git_branch,
+        const std::string& _git_tag, const std::string& _build_date,
+        float _wheel_distance, float _wheel_diameter);
+    void publish_full_status();
 
     template <typename Func> void try_serial_operation(Func&& func)
     {

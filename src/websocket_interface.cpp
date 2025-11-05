@@ -84,61 +84,63 @@ void WebsocketInterface::on_close(connection_hdl hdl)
     std::cout << "[WebsocketInterface] Conexão fechada." << std::endl;
 }
 
-void WebsocketInterface::on_message(connection_hdl hdl,
-                                    server_t::message_ptr msg)
-{
-    std::string payload = msg->get_payload();
-    // std::cout << "[WebsocketInterface] Mensagem recebida: " << payload <<
-    // std::endl;
+void WebsocketInterface::on_message(connection_hdl hdl, server_t::message_ptr msg) {
+    std::string payload_str = msg->get_payload();
+    // std::cout << "[WebsocketInterface] Mensagem recebida: " << payload_str << std::endl;
 
-    try
-    {
-        json data = json::parse(payload);
+    try {
+        json data = json::parse(payload_str);
         std::string type = data.at("type");
 
         // --- Roteamento de Mensagens da GUI ---
 
-        if (type == "set_pid" && m_pid_callback)
-        {
-            double p = data.at("p");
-            double i = data.at("i");
-            double d = data.at("d");
-            // Chama o callback registrado pelo nó ROS
-            m_pid_callback(p, i, d);
+        // Tipos de SET (enviados pela GUI)
+        if (type == "set_pid" && m_pid_callback) {
+            // Este callback agora precisa saber o "target"
+            // Vamos modificar a assinatura do callback ou passar o JSON inteiro
+            
+            // Abordagem 1: Modificar o callback (Requer mudança no .hpp)
+            // m_pid_callback(data.at("target"), data.at("p"), data.at("i"), data.at("d"));
+
+            // Abordagem 2: Usar um callback genérico (m_command_callback)
+            // (Esta é a abordagem mais flexível que implementamos na R1)
+            if (m_command_callback) {
+                m_command_callback(type, data); // Passa o JSON inteiro
+            } else {
+                 std::cerr << "[WebsocketInterface] 'set_pid' recebido, mas m_command_callback não está registrado." << std::endl;
+            }
+
         }
-        else if (type == "set_speed_config" && m_speed_config_callback)
-        {
-            double max_vel = data.at("max_vel");
-            double max_acc = data.at("max_acc");
-            m_speed_config_callback(max_vel, max_acc);
+        else if (type == "set_limits") {
+            if (m_command_callback) m_command_callback(type, data);
         }
-        else if (type == "command" && m_command_callback)
-        {
-            std::string cmd = data.at("command");
-            json cmd_payload = data.value("payload", json::object());
-            m_command_callback(cmd, cmd_payload);
+        else if (type == "set_kalman_cov") {
+            if (m_command_callback) m_command_callback(type, data);
         }
-        else
-        {
-            std::cerr << "[WebsocketInterface] Tipo de mensagem desconhecido "
-                         "ou callback não registrado: "
-                      << type << std::endl;
+        else if (type == "set_open_loop") {
+            if (m_command_callback) m_command_callback(type, data);
         }
-    }
-    catch (json::parse_error& e)
-    {
-        std::cerr << "[WebsocketInterface] Erro de parse JSON: " << e.what()
-                  << std::endl;
-    }
-    catch (json::type_error& e)
-    {
-        std::cerr << "[WebsocketInterface] JSON faltando campo obrigatório: "
-                  << e.what() << std::endl;
-    }
-    catch (std::exception& e)
-    {
-        std::cerr << "[WebsocketInterface] Erro ao processar mensagem: "
-                  << e.what() << std::endl;
+        
+        // Tipos de GET (solicitações da GUI)
+        else if (type == "get_ecu_info") {
+            // O nó ROS deve responder a isso
+            if (m_command_callback) m_command_callback(type, data);
+        }
+        else if (type == "get_all_configs") {
+            // O nó ROS deve responder a isso
+            if (m_command_callback) m_command_callback(type, data);
+        }
+
+        // ... (outros 'else if' que você possa ter) ...
+
+        else {
+            std::cerr << "[WebsocketInterface] Tipo de mensagem desconhecido: " << type << std::endl;
+        }
+
+    } catch (json::parse_error& e) {
+        std::cerr << "[WebsocketInterface] Erro de parse JSON: " << e.what() << std::endl;
+    } catch (std::exception& e) {
+        std::cerr << "[WebsocketInterface] Erro ao processar mensagem: " << e.what() << std::endl;
     }
 }
 

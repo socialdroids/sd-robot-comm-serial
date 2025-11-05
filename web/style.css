@@ -5,6 +5,8 @@
     --primary-color: #007acc;
     --green: #4caf50;
     --red: #f44336;
+    --yellow: #f1c40f;
+    --orange: #e67e22;
     --border-color: #444;
 }
 
@@ -13,60 +15,258 @@ body {
     background-color: var(--bg-color);
     color: var(--text-color);
     margin: 0;
-    padding: 20px;
+    padding: 0 20px 20px 20px;
     line-height: 1.6;
 }
 
+/* --- Header e Status --- */
 header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    margin: 0 0 15px 0;
+    padding-top: 15px;
     border-bottom: 2px solid var(--border-color);
     padding-bottom: 10px;
 }
-
-h1 { color: var(--primary-color); }
+h1 { color: var(--primary-color); margin: 0; }
 h2 { border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
 
-.container {
+#connection-status { padding: 5px 15px; border-radius: 5px; font-weight: bold; }
+.status-connected { background-color: var(--green); color: white; }
+.status-disconnected { background-color: var(--red); color: white; }
+
+/* --- Sistema de Abas --- */
+.tabs {
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 20px;
+}
+.tab-button {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    padding: 10px 20px;
+    font-size: 1.1em;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+}
+.tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: bold;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* --- Layout da Aba de Monitoramento --- */
+.monitor-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 20px;
 }
-
 .card {
     background-color: var(--card-color);
     border-radius: 8px;
     padding: 20px;
+    max-height: 800px; /* Altura máxima adicionada */
     border: 1px solid var(--border-color);
 }
+.card.chart-card,
+.card.chart-card-large {
+    /* Dê uma altura fixa */
+    height: 400px;
+    
+    /* Use flexbox para organizar o conteúdo interno (título, gráfico, toggles) */
+    display: flex;
+    flex-direction: column;
+}
 
+.card.chart-card-large { 
+    height: 450px; 
+    grid-column: span 2; 
+}
+
+@media (max-width: 1200px) {
+    .chart-card-large { grid-column: span 1; }
+}
 .full-width { grid-column: 1 / -1; }
 .emoji { margin-right: 10px; }
 
-.data-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 10px 20px;
-    align-items: center;
+.chart-container {
+    /* Este container vai crescer para preencher o espaço livre no card */
+    flex-grow: 1;
+    position: relative; /* Chart.js precisa de um container 'relative' */
+    min-height: 0; /* Correção crucial para flexbox em coluna */
 }
-.data-grid span:nth-child(odd) { font-weight: bold; }
 
-.form-group {
+.chart-container canvas {
+    /* O canvas vai preencher 100% do .chart-container */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* --- Gráficos --- */
+.chart-toggles {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 10px;
+    font-size: 0.9em;
+}
+.chart-toggles label { display: flex; align-items: center; gap: 5px; }
+
+/* --- Pose Canvas --- */
+#poseCanvas {
+    background-color: #111;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+}
+
+.pose-values {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 10px;
+    font-family: monospace;
+    font-size: 1.1em;
+    background-color: #111;
+    padding: 8px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+.pose-values span {
+    flex: 1;
+    text-align: center;
+    color: #aaa;
+}
+.pose-values span span { /* O valor numérico */
+    font-weight: bold;
+    color: var(--primary-color);
+    min-width: 50px;
+    display: inline-block;
+    text-align: left;
+}
+
+/* --- Gauges --- */
+.gauge-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    text-align: center;
+}
+.gauge-label {
+    font-size: 0.85em;
+    font-weight: normal;
+    margin-top: 0px;
+    color: #aaa;
+    letter-spacing: 0.5px;
+}
+.gauge-value {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--text-color); /* Cor principal */
+    margin-top: 2px;
+}
+.gauge-container canvas { width: 100% !important; height: auto !important; }
+
+/* --- Indicadores de Status --- */
+.status-indicators {
+    display: flex;
+    justify-content: space-around;
+    gap: 15px;
+    align-items: flex-start;
+}
+.indicator {
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: bold;
+    text-align: center;
+    background-color: var(--border-color);
+    color: #888;
+    flex: 1;
+}
+.indicator.active.red { background-color: var(--red); color: white; }
+.indicator.active.green { background-color: var(--green); color: white; }
+.indicator.active.yellow { background-color: var(--yellow); color: black; }
+
+.bumper-container {
+    flex: 1.5;
+    text-align: center;
+}
+.bumper-container h4 {
+    margin: 0 0 8px 0;
+    padding: 0;
+    font-size: 0.9em;
+    color: #aaa;
+    text-transform: uppercase;
+    font-weight: normal;
+    letter-spacing: 1px;
+}
+.bumper-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+}
+.indicator.bumper {
+    background-color: var(--border-color);
+    color: #888;
+}
+.indicator.bumper.active { background-color: var(--orange); color: white; }
+
+/* --- Logs e Info --- */
+#log-messages {
+    background-color: #111;
+    border: 1px solid var(--border-color);
+    height: 150px;
+    overflow-y: auto;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 1.2em;
+}
+.log-entry { margin-bottom: 5px; }
+#ecu-info {
+    font-family: monospace;
+    font-size: 1.2em;
+    white-space: pre-wrap;
+    background-color: #111;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+/* --- Aba de Configuração --- */
+#config-forms-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+@media (max-width: 1000px) {
+    #config-forms-grid { grid-template-columns: 1fr; }
+}
+form { display: flex; flex-direction: column; gap: 15px; }
+fieldset {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 15px;
     display: flex;
     gap: 10px;
     align-items: center;
-    margin-bottom: 15px;
+    flex-wrap: wrap;
 }
-.form-group label { font-weight: bold; }
+legend { font-weight: bold; color: var(--primary-color); }
 input[type="number"] {
     background-color: var(--bg-color);
     color: var(--text-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 8px;
-    width: 80px;
+    width: 100px;
 }
 button {
     background-color: var(--primary-color);
@@ -76,25 +276,54 @@ button {
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s;
-}
-button:hover { background-color: #005a9e; }
-hr { border-color: var(--border-color); margin: 20px 0; }
-
-#connection-status {
-    padding: 5px 15px;
-    border-radius: 5px;
     font-weight: bold;
 }
-.status-connected { background-color: var(--green); color: white; }
-.status-disconnected { background-color: var(--red); color: white; }
+button:hover { background-color: #005a9e; }
 
-#log-messages {
-    background-color: #111;
-    border: 1px solid var(--border-color);
-    height: 150px;
-    overflow-y: auto;
-    padding: 10px;
-    border-radius: 4px;
-    font-family: monospace;
+/* --- Matrizes Kalman --- */
+.matrix-grid {
+    display: grid;
+    gap: 5px;
+    margin-bottom: 15px;
 }
-.log-entry { margin-bottom: 5px; }
+.matrix-grid input { width: 100%; box-sizing: border-box; }
+
+/* --- Toggle Switch --- */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+    vertical-align: middle;
+    margin-left: 15px;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #555;
+    transition: .4s;
+    border-radius: 34px;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px; width: 26px;
+    left: 4px; bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+.open-loop-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+}
+.open-loop-container label[for="open-loop-check"] {
+    font-weight: bold;
+}
+input:checked + .slider { background-color: var(--primary-color); }
+input:checked + .slider:before { transform: translateX(26px); }

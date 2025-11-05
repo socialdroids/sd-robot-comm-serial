@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Controle do Robô</title>
+    <!-- Carrega a biblioteca de gráficos Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Carrega a biblioteca de gauges (gauge.js) -->
+    <script src="https://bernii.github.io/gauge.js/dist/gauge.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,50 +15,209 @@
         <h1>Painel de Controle do Robô</h1>
         <div id="connection-status" class="status-disconnected">DESCONECTADO</div>
     </header>
-    <main class="container">
-        <div class="card">
-            <h2><span class="emoji">📊</span> Status em Tempo Real</h2>
-            <div class="data-grid">
-                <span>Velocidade Linear:</span> <span id="val-linear-vel">0.00</span> m/s
-                <span>Velocidade Angular:</span> <span id="val-angular-vel">0.00</span> rad/s
-                <span>Setpoint Linear:</span> <span id="val-setpoint-linear">0.00</span> m/s
-                <span>Setpoint Angular:</span> <span id="val-setpoint-angular">0.00</span> rad/s
-                <span>Sensor de Corrente A:</span> <span id="val-current-a">0.00</span> A
-                <span>Sensor de Corrente B:</span> <span id="val-current-b">0.00</span> A
-                <span>Bumper:</span> <span id="val-bumper">Inativo</span>
+
+    <!-- Navegação das Abas -->
+    <nav class="tabs">
+        <button class="tab-button active" data-tab="tab-monitoramento">Monitoramento</button>
+        <button class="tab-button" data-tab="tab-configuracao">Configuração</button>
+    </nav>
+
+    <main>
+        <!-- ABA DE MONITORAMENTO -->
+        <div id="tab-monitoramento" class="tab-content active">
+            <div class="monitor-grid">
+                
+                <!-- Gráfico de Velocidade -->
+                <div class="card chart-card-large">
+                    <h2>Velocidades</h2>
+                    <div class="chart-container">
+                        <canvas id="velChart"></canvas>
+                    </div>
+                    <div class="chart-toggles" id="vel-toggles">
+                        <label><input type="checkbox" data-dataset="vel_linear_fusion" checked> Fusão Linear</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_fusion" checked> Fusão Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_linear_encoder"> Encoder Linear</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_encoder"> Encoder Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_imu"> IMU Angular</label>
+                        <label><input type="checkbox" data-dataset="setpoint_linear" checked> Setpoint Linear</label>
+                        <label><input type="checkbox" data-dataset="setpoint_angular" checked> Setpoint Angular</label>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Aceleração -->
+                <div class="card chart-card">
+                    <h2>Aceleração IMU</h2>
+                    <div class="chart-container">
+                        <canvas id="accelChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Encoders -->
+                <div class="card chart-card">
+                    <h2>Pulsos do Encoder</h2>
+                    <div class="chart-container">
+                        <canvas id="encoderChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Pose do Robô -->
+                <div class="card">
+                    <h2>Pose do Robô</h2>
+                    <div class="chart-container" style="aspect-ratio: 1/1;">
+                        <canvas id="poseCanvas"></canvas>
+                    </div>
+                    <div class="pose-values">
+                        <span>X: <span id="pose-val-x">0.000</span> m</span>
+                        <span>Y: <span id="pose-val-y">0.000</span> m</span>
+                        <span>&Theta;: <span id="pose-val-theta">0.000</span> rad</span>
+                    </div>
+                </div>
+
+                <!-- Gauges -->
+                <div class="card gauge-container">
+                    <h2>Indicadores</h2>
+                    <div class="gauge-grid">
+                        <div>
+                            <canvas id="gauge-battery"></canvas>
+                            <div class="gauge-label">Bateria (%)</div>
+                            <div class="gauge-value" id="gauge-val-battery">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-motor-left"></canvas>
+                            <div class="gauge-label">Corrente Esq. (A)</div>
+                            <div class="gauge-value" id="gauge-val-motor-left">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-motor-right"></canvas>
+                            <div class="gauge-label">Corrente Dir. (A)</div>
+                            <div class="gauge-value" id="gauge-val-motor-right">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-charge-current"></canvas>
+                            <div class="gauge-label">Corrente Carga (A)</div>
+                            <div class="gauge-value" id="gauge-val-charge-current">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-temp-ecu"></canvas>
+                            <div class="gauge-label">Temp. ECU (°C)</div>
+                            <div class="gauge-value" id="gauge-val-temp-ecu">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-temp-mcu"></canvas>
+                            <div class="gauge-label">Temp. MCU (°C)</div>
+                            <div class="gauge-value" id="gauge-val-temp-mcu">0.0</div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="status-indicators">
+                        <div class="indicator" id="status-estop">E-STOP</div>
+                        <div class="indicator" id="status-charging">CARREGANDO</div>
+                        
+                        <div class="bumper-container">
+                            <h4>Bumpers</h4>
+                            <div class="bumper-grid">
+                                <div class="indicator bumper" id="bumper-fl">F-L</div>
+                                <div class="indicator bumper" id="bumper-fr">F-R</div>
+                                <div class="indicator bumper" id="bumper-bl">B-L</div>
+                                <div class="indicator bumper" id="bumper-br">B-R</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Informações e Logs -->
+                <div class="card">
+                    <h2>Informações da ECU</h2>
+                    <pre id="ecu-info">Aguardando dados...</pre>
+                </div>
+                <div class="card">
+                    <h2>Logs da ECU</h2>
+                    <div id="log-messages"></div>
+                </div>
+
             </div>
         </div>
 
-        <div class="card">
-            <h2><span class="emoji">⚙️</span> Configuração</h2>
-            <form id="pid-form">
-                <h3>Controle PID</h3>
-                <div class="form-group">
-                    <label for="pid-p">P:</label>
-                    <input type="number" id="pid-p" step="0.01" value="1.0">
-                    <label for="pid-i">I:</label>
-                    <input type="number" id="pid-i" step="0.01" value="0.1">
-                    <label for="pid-d">D:</label>
-                    <input type="number" id="pid-d" step="0.01" value="0.05">
+        <!-- ABA DE CONFIGURAÇÃO -->
+        <div id="tab-configuracao" class="tab-content">
+            
+            <div id="config-forms-grid">
+                <!-- PIDs -->
+                <div class="card">
+                    <h2><span class="emoji">🔧</span> Controle PID</h2>
+                    <form id="pid-form">
+                        <fieldset>
+                            <legend>Velocidade Linear</legend>
+                            <label>P: <input type="number" id="pid-linear-p" step="0.01"></label>
+                            <label>I: <input type="number" id="pid-linear-i" step="0.01"></label>
+                            <label>D: <input type="number" id="pid-linear-d" step="0.01"></label>
+                            <button type="submit" data-target="linear">Enviar</button>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Velocidade Angular</legend>
+                            <label>P: <input type="number" id="pid-angular-p" step="0.01"></label>
+                            <label>I: <input type="number" id="pid-angular-i" step="0.01"></label>
+                            <label>D: <input type="number" id="pid-angular-d" step="0.01"></label>
+                            <button type="submit" data-target="angular">Enviar</button>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Roda Esquerda</legend>
+                            <label>P: <input type="number" id="pid-left-p" step="0.01"></label>
+                            <label>I: <input type="number" id="pid-left-i" step="0.01"></label>
+                            <label>D: <input type="number" id="pid-left-d" step="0.01"></label>
+                            <button type="submit" data-target="wheel_left">Enviar</button>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Roda Direita</legend>
+                            <label>P: <input type="number" id="pid-right-p" step="0.01"></label>
+                            <label>I: <input type="number" id="pid-right-i" step="0.01"></label>
+                            <label>D: <input type="number" id="pid-right-d" step="0.01"></label>
+                            <button type="submit" data-target="wheel_right">Enviar</button>
+                        </fieldset>
+                    </form>
                 </div>
-                <button type="submit">Atualizar PID</button>
-            </form>
-            <hr>
-            <form id="speed-form">
-                <h3>Limites de Velocidade</h3>
-                <div class="form-group">
-                    <label for="max-vel">Vel. Máx (m/s):</label>
-                    <input type="number" id="max-vel" step="0.1" value="1.5">
-                    <label for="max-acc">Acel. Máx (m/s²):</label>
-                    <input type="number" id="max-acc" step="0.1" value="0.5">
-                </div>
-                <button type="submit">Atualizar Limites</button>
-            </form>
-        </div>
 
-        <div class="card full-width">
-            <h2><span class="emoji">📜</span> Log do Servidor</h2>
-            <div id="log-messages"></div>
+                <!-- Limites -->
+                <div class="card">
+                    <h2><span class="emoji">🚦</span> Limites</h2>
+                    <form id="limits-form">
+                        <fieldset>
+                            <legend>Linear</legend>
+                            <label>Vel. Máx (m/s): <input type="number" id="limit-linear-vel" step="0.1"></label>
+                            <label>Acel. Máx (m/s²): <input type="number" id="limit-linear-acc" step="0.1"></label>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Angular</legend>
+                            <label>Vel. Máx (rad/s): <input type="number" id="limit-angular-vel" step="0.1"></label>
+                            <label>Acel. Máx (rad/s²): <input type="number" id="limit-angular-acc" step="0.1"></label>
+                        </fieldset>
+                        <button type="submit">Enviar Limites</button>
+                    </form>
+                    <hr>
+                    <h2><span class="emoji">🔄</span> Modos</h2>
+                        <form id="open-loop-form" class="open-loop-container">
+                            <label for="open-loop-check">Modo Malha Aberta</label> <label class="toggle-switch"> <input type="checkbox" id="open-loop-check">
+                                <span class="slider"></span>
+                            </label>
+                        </form>
+                </div>
+
+                <!-- Kalman -->
+                <div class="card full-width">
+                    <h2><span class="emoji">🔬</span> Filtro de Kalman (Covariância)</h2>
+                    <form id="kalman-form">
+                        <h3>Matriz de Covariância do Modelo (Q) - 5x5</h3>
+                        <div class="matrix-grid" id="kalman-model-matrix" data-size="5">
+                            <!-- JS vai popular isso -->
+                        </div>
+                        <h3>Matriz de Covariância da Medição (R) - 4x4</h3>
+                        <div class="matrix-grid" id="kalman-measurement-matrix" data-size="4">
+                            <!-- JS vai popular isso -->
+                        </div>
+                        <button type="submit">Enviar Matrizes</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </main>
 
