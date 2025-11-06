@@ -136,7 +136,11 @@ void WebsocketInterface::on_message(connection_hdl hdl,
             if (m_command_callback)
                 m_command_callback(type, data);
         }
-
+        else if (type == "set_velocity_command")
+        {
+            if (m_command_callback)
+                m_command_callback(type, data);
+        }
         // Tipos de GET (solicitações da GUI)
         else if (type == "get_ecu_info")
         {

@@ -7,6 +7,7 @@ message PIDConfig
   float k_p = 1;
   float k_i = 2;
   float k_d = 3;
+  bool enabled = 4;
 }
 
 message RobotParameters

@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- Carrega a biblioteca de gauges (gauge.js) -->
     <script src="https://bernii.github.io/gauge.js/dist/gauge.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -20,6 +21,7 @@
     <nav class="tabs">
         <button class="tab-button active" data-tab="tab-monitoramento">Monitoramento</button>
         <button class="tab-button" data-tab="tab-configuracao">Configuração</button>
+        <button class="tab-button" data-tab="tab-comandos">Comandos</button>
     </nav>
 
     <main>
@@ -54,9 +56,13 @@
 
                 <!-- Gráfico de Encoders -->
                 <div class="card chart-card">
-                    <h2>Pulsos do Encoder</h2>
+                    <h2>Velocidade dos Encoders</h2>
                     <div class="chart-container">
                         <canvas id="encoderChart"></canvas>
+                    </div>
+                    <div class="chart-values">
+                        <span>Pulsos Esq: <span id="encoder-val-left">0</span></span>
+                        <span>Pulsos Dir: <span id="encoder-val-right">0</span></span>
                     </div>
                 </div>
 
@@ -148,31 +154,75 @@
                     <form id="pid-form">
                         <fieldset>
                             <legend>Velocidade Linear</legend>
-                            <label>P: <input type="number" id="pid-linear-p" step="0.01"></label>
-                            <label>I: <input type="number" id="pid-linear-i" step="0.01"></label>
-                            <label>D: <input type="number" id="pid-linear-d" step="0.01"></label>
-                            <button type="submit" data-target="linear">Enviar</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-linear-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-linear-p">0.0</span>
+                                I: <span id="current-pid-linear-i">0.0</span>
+                                D: <span id="current-pid-linear-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-linear-p" step="0.01" placeholder="P">
+                                <input type="number" id="pid-linear-i" step="0.01" placeholder="I">
+                                <input type="number" id="pid-linear-d" step="0.01" placeholder="D">
+                                <button type="submit" data-target="linear">Enviar</button>
+                            </div>
                         </fieldset>
                         <fieldset>
                             <legend>Velocidade Angular</legend>
-                            <label>P: <input type="number" id="pid-angular-p" step="0.01"></label>
-                            <label>I: <input type="number" id="pid-angular-i" step="0.01"></label>
-                            <label>D: <input type="number" id="pid-angular-d" step="0.01"></label>
-                            <button type="submit" data-target="angular">Enviar</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-angular-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-angular-p">0.0</span>
+                                I: <span id="current-pid-angular-i">0.0</span>
+                                D: <span id="current-pid-angular-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-angular-p" step="0.01" placeholder="P">
+                                <input type="number" id="pid-angular-i" step="0.01" placeholder="I">
+                                <input type="number" id="pid-angular-d" step="0.01" placeholder="D">
+                                <button type="submit" data-target="angular">Enviar</button>
+                            </div>
                         </fieldset>
                         <fieldset>
                             <legend>Roda Esquerda</legend>
-                            <label>P: <input type="number" id="pid-left-p" step="0.01"></label>
-                            <label>I: <input type="number" id="pid-left-i" step="0.01"></label>
-                            <label>D: <input type="number" id="pid-left-d" step="0.01"></label>
-                            <button type="submit" data-target="left">Enviar</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-left-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-left-p">0.0</span>
+                                I: <span id="current-pid-left-i">0.0</span>
+                                D: <span id="current-pid-left-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-left-p" step="0.01" placeholder="P">
+                                <input type="number" id="pid-left-i" step="0.01" placeholder="I">
+                                <input type="number" id="pid-left-d" step="0.01" placeholder="D">
+                                <button type="submit" data-target="left">Enviar</button>
+                            </div>
                         </fieldset>
                         <fieldset>
                             <legend>Roda Direita</legend>
-                            <label>P: <input type="number" id="pid-right-p" step="0.01"></label>
-                            <label>I: <input type="number" id="pid-right-i" step="0.01"></label>
-                            <label>D: <input type="number" id="pid-right-d" step="0.01"></label>
-                            <button type="submit" data-target="right">Enviar</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-right-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-right-p">0.0</span>
+                                I: <span id="current-pid-right-i">0.0</span>
+                                D: <span id="current-pid-right-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-right-p" step="0.01" placeholder="P">
+                                <input type="number" id="pid-right-i" step="0.01" placeholder="I">
+                                <input type="number" id="pid-right-d" step="0.01" placeholder="D">
+                                <button type="submit" data-target="right">Enviar</button>
+                            </div>
                         </fieldset>
                     </form>
                 </div>
@@ -216,6 +266,23 @@
                         </div>
                         <button type="submit">Enviar Matrizes</button>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-comandos" class="tab-content">
+            <div class="command-grid">
+                <div class="card">
+                    <h2>Controle Manual (Joystick)</h2>
+                    <div id="joystick-container"></div>
+                    <div class="joystick-values">
+                        <span>Linear: <span id="joystick-val-linear">0.00</span> m/s</span>
+                        <span>Angular: <span id="joystick-val-angular">0.00</span> rad/s</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Outros Comandos</h2>
+                    <p>(Espaço para botões de comando, ex: "Home", "Parar Serviço", etc.)</p>
                 </div>
             </div>
         </div>

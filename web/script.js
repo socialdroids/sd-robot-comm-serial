@@ -4,6 +4,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_POSE_POINTS = 150;  // Metade dos pontos do gráfico
     const POSE_CANVAS_SIZE = 300; // Deve bater com o <canvas>
     const MAX_LOG_ENTRIES = 200;
+    let joystickVel = { linear: 0, angular: 0 };
+    let joystickTimer = null;
+    const JOYSTICK_SEND_INTERVAL = 100; // Envia comandos 10x por segundo
+    const JOYSTICK_MAX_LINEAR = 0.5; // m/s
+    const JOYSTICK_MAX_ANGULAR = 1.0; // rad/s
 
     // --- Elementos da UI ---
     const statusDiv = document.getElementById("connection-status");
@@ -35,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
         initPoseCanvas();
         initForms();
         initGraphToggles();
+        initJoystick();
         connect();
     }
 
@@ -105,10 +111,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Rola para o final (apenas se o usuário já não estiver rolando para cima)
         // (Uma pequena melhoria de usabilidade)
-        const isScrolledToBottom = logContainer.scrollHeight - logContainer.clientHeight <= logContainer.scrollTop + 10;
-        if (isScrolledToBottom) {
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
+        // const isScrolledToBottom = logContainer.scrollHeight - logContainer.clientHeight <= logContainer.scrollTop + 10;
+        // if (isScrolledToBottom) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+        // }
     }
 
     // --- Roteador de Mensagens ---
@@ -174,11 +180,11 @@ document.addEventListener("DOMContentLoaded", () => {
             data: {
                 labels: [],
                 datasets: [
-                    { label: 'Pulsos Esq.', data: [], borderColor: '#3498db', tension: 0.1 },
-                    { label: 'Pulsos Dir.', data: [], borderColor: '#e74c3c', tension: 0.1 }
+                    { label: 'Vel. Esq.', data: [], borderColor: '#3498db', tension: 0.1 },
+                    { label: 'Vel. Dir.', data: [], borderColor: '#e74c3c', tension: 0.1 }
                 ]
             },
-            options: chartOptions('Pulsos', true)
+            options: chartOptions('Velocidade (rad/s)', true) // Mostra legenda
         });
     }
 
@@ -284,12 +290,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         
         // Encoders
-        if (charts.encoders) {
+        
+        if (charts.encoders && data.velocity && data.velocity.encoder) {
             charts.encoders.data.labels.push(now);
-            charts.encoders.data.datasets[0].data.push(data.encoders.left_pulses);
-            charts.encoders.data.datasets[1].data.push(data.encoders.right_pulses);
+            charts.encoders.data.datasets[0].data.push(data.velocity.encoder.left || 0);
+            charts.encoders.data.datasets[1].data.push(data.velocity.encoder.right || 0);
             trimChartHistory(charts.encoders);
             charts.encoders.update('none');
+        }
+        
+        // Atualiza os labels de contagem de pulsos
+        if (data.encoders) {
+            document.getElementById('encoder-val-left').textContent = data.encoders.left_pulses;
+            document.getElementById('encoder-val-right').textContent = data.encoders.right_pulses;
         }
     }
 
@@ -402,8 +415,6 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         const h = POSE_CANVAS_SIZE;
 
         ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = "#111";
-        ctx.fillRect(0, 0, w, h);
 
         if (poseHistory.length === 0) return;
 
@@ -413,19 +424,22 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         avgX /= poseHistory.length;
         avgY /= poseHistory.length;
         
-        // Fator de zoom (provisório, idealmente seria dinâmico)
-        const zoom = 20; // 20 pixels por metro
+        // Fator de zoom (provisório)
+        const zoom = 40; // 40 pixels por metro
 
         ctx.save();
-        // Centraliza o canvas na trajetória média
-        ctx.translate(w / 2 - avgX * zoom, h / 2 - avgY * zoom);
+        // Centraliza o canvas na trajetória média e inverte o eixo Y
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(1, -1); // Inverte Y (para Y positivo ser para cima)
+        ctx.translate(-avgX * zoom, -avgY * zoom);
+        
+        // Desenha a Grade e os Eixos
+        drawPoseGrid(ctx, avgX, avgY, zoom, w, h);
 
-        // Desenha grid (relativo ao centro)
-        // ... (lógica de grid omitida por brevidade)
-
-        // Desenha trajetória
+        //  Desenha trajetória
         ctx.beginPath();
-        ctx.strokeStyle = "#444";
+        ctx.strokeStyle = "#aaa"; // Cor mais clara
+        ctx.lineWidth = 3; // MODIFICADO: Mais largo
         const firstPose = poseHistory[0];
         ctx.moveTo(firstPose.x * zoom, firstPose.y * zoom);
         poseHistory.forEach(p => {
@@ -436,7 +450,10 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         // Desenha o robô (posição atual)
         const currentPose = poseHistory[poseHistory.length - 1];
         ctx.translate(currentPose.x * zoom, currentPose.y * zoom);
-        ctx.rotate(currentPose.theta);
+        ctx.rotate(currentPose.theta); // Theta já deve estar em radianos
+        
+        // Inverte o robô de volta, já que invertemos o canvas
+        ctx.scale(1, -1);
 
         // Desenha um triângulo para o robô
         ctx.beginPath();
@@ -450,6 +467,51 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         ctx.restore();
     }
     
+    function drawPoseGrid(ctx, centerX, centerY, zoom, width, height) {
+        ctx.strokeStyle = "#2a2a2a"; // Cor da grade
+        ctx.lineWidth = 1;
+
+        const meterSize = 1 * zoom; // 1 metro em pixels
+        const viewWidthMeters = (width / zoom) / 2;
+        const viewHeightMeters = (height / zoom) / 2;
+        
+        const startX = Math.floor(centerX - viewWidthMeters);
+        const endX = Math.ceil(centerX + viewWidthMeters);
+        const startY = Math.floor(centerY - viewHeightMeters);
+        const endY = Math.ceil(centerY + viewHeightMeters);
+        
+        // Linhas verticais
+        for (let x = startX; x <= endX; x++) {
+            ctx.beginPath();
+            ctx.moveTo(x * zoom, startY * zoom - meterSize);
+            ctx.lineTo(x * zoom, endY * zoom + meterSize);
+            ctx.stroke();
+        }
+        // Linhas horizontais
+        for (let y = startY; y <= endY; y++) {
+            ctx.beginPath();
+            ctx.moveTo(startX * zoom - meterSize, y * zoom);
+            ctx.lineTo(endX * zoom + meterSize, y * zoom);
+            ctx.stroke();
+        }
+        
+        // Eixos X e Y
+        ctx.strokeStyle = "#444"; // Cor dos eixos
+        ctx.lineWidth = 2;
+        
+        // Eixo X (Y=0)
+        ctx.beginPath();
+        ctx.moveTo(startX * zoom - meterSize, 0);
+        ctx.lineTo(endX * zoom + meterSize, 0);
+        ctx.stroke();
+        
+        // Eixo Y (X=0)
+        ctx.beginPath();
+        ctx.moveTo(0, startY * zoom - meterSize);
+        ctx.lineTo(0, endY * zoom + meterSize);
+        ctx.stroke();
+    }
+    
     // --- Lógica da Aba de Configuração ---
     function initForms() {
         // PIDs
@@ -458,15 +520,44 @@ Data do Build:    ${info.build_date || 'N/A'}`;
             const target = e.submitter.dataset.target;
             if (!target) return;
             
+            // Pega valores dos inputs, se estiverem vazios, não envia
+            const p_val = document.getElementById(`pid-${target}-p`).value;
+            const i_val = document.getElementById(`pid-${target}-i`).value;
+            const d_val = document.getElementById(`pid-${target}-d`).value;
+            
             const payload = {
                 type: "set_pid",
                 target: target,
-                p: parseFloat(document.getElementById(`pid-${target}-p`).value),
-                i: parseFloat(document.getElementById(`pid-${target}-i`).value),
-                d: parseFloat(document.getElementById(`pid-${target}-d`).value)
+                // NOVO: Envia o estado do checkbox
+                enabled: document.getElementById(`pid-${target}-enable`).checked,
+                // Envia o valor apenas se não for nulo
+                p: (p_val !== "") ? parseFloat(p_val) : null,
+                i: (i_val !== "") ? parseFloat(i_val) : null,
+                d: (d_val !== "") ? parseFloat(d_val) : null
             };
+            
             ws.send(JSON.stringify(payload));
             addLog(`Enviando PID para: ${target}`);
+
+            // Limpa os campos de input após o envio
+            document.getElementById(`pid-${target}-p`).value = "";
+            document.getElementById(`pid-${target}-i`).value = "";
+            document.getElementById(`pid-${target}-d`).value = "";
+        });
+        
+        // Adiciona listener para os checkboxes de PID (envia imediatamente)
+        const pidCheckboxes = document.querySelectorAll('#pid-form input[type="checkbox"]');
+        pidCheckboxes.forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const target = e.target.id.replace('pid-', '').replace('-enable', '');
+                const payload = {
+                    type: "set_pid_enabled", // Um novo tipo de mensagem
+                    target: target,
+                    enabled: e.target.checked
+                };
+                ws.send(JSON.stringify(payload));
+                addLog(`PID ${target} ${e.target.checked ? 'Habilitado' : 'Desabilitado'}`);
+            });
         });
 
         // Limites
@@ -567,9 +658,12 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         if (configs.pid) {
             ['linear', 'angular', 'left', 'right'].forEach(target => {
                 if (configs.pid[target]) {
-                    document.getElementById(`pid-${target}-p`).value = configs.pid[target].p;
-                    document.getElementById(`pid-${target}-i`).value = configs.pid[target].i;
-                    document.getElementById(`pid-${target}-d`).value = configs.pid[target].d;
+                    // Atualiza os LABELS de valor atual
+                    document.getElementById(`current-pid-${target}-p`).textContent = configs.pid[target].p.toFixed(3);
+                    document.getElementById(`current-pid-${target}-i`).textContent = configs.pid[target].i.toFixed(3);
+                    document.getElementById(`current-pid-${target}-d`).textContent = configs.pid[target].d.toFixed(3);
+                    // Atualiza o CHECKBOX
+                    document.getElementById(`pid-${target}-enable`).checked = configs.pid[target].enabled;
                 }
             });
         }
@@ -614,6 +708,76 @@ Data do Build:    ${info.build_date || 'N/A'}`;
                 chart.update();
             }
         });
+    }
+
+    // Lógica do Joystick 
+    function initJoystick() {
+        const options = {
+            zone: document.getElementById('joystick-container'),
+            mode: 'semi', // 'static' ou 'semi' ou 'dynamic'
+            catchDistance: 150,
+            color: 'white',
+            size: 200 // Tamanho do joystick
+        };
+        const manager = nipplejs.create(options);
+        
+        const linearVal = document.getElementById('joystick-val-linear');
+        const angularVal = document.getElementById('joystick-val-angular');
+
+        manager.on('move', (evt, data) => {
+            if (!data.vector) return;
+            
+            // Mapeia o joystick (Y para linear, X para angular)
+            // Normaliza a distância (0 a 1)
+            const distance = Math.min(data.distance / (options.size / 2), 1.0);
+            const angleRad = data.angle.radian;
+            
+            // Calcula vetores x e y normalizados
+            const vectorX = distance * Math.cos(angleRad);
+            const vectorY = distance * Math.sin(angleRad);
+            
+            // Mapeia para velocidades do robô
+            const linear = vectorY * JOYSTICK_MAX_LINEAR;
+            const angular = -vectorX * JOYSTICK_MAX_ANGULAR; // Negativo para (esquerda -> +angular)
+            
+            joystickVel = { linear, angular };
+            
+            // Atualiza a UI
+            linearVal.textContent = linear.toFixed(2);
+            angularVal.textContent = angular.toFixed(2);
+            
+            // Inicia o timer para enviar os dados, se não estiver rodando
+            if (!joystickTimer) {
+                // Envia o primeiro comando imediatamente
+                sendJoystickVelocity(); 
+                joystickTimer = setInterval(sendJoystickVelocity, JOYSTICK_SEND_INTERVAL);
+            }
+        });
+
+        manager.on('end', () => {
+            // Para o timer
+            clearInterval(joystickTimer);
+            joystickTimer = null;
+            
+            // Reseta e envia o comando de parada
+            joystickVel = { linear: 0, angular: 0 };
+            sendJoystickVelocity();
+            
+            // Atualiza a UI
+            linearVal.textContent = "0.00";
+            angularVal.textContent = "0.00";
+        });
+    }
+    
+    // Função que envia o comando de velocidade
+    function sendJoystickVelocity() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        
+        ws.send(JSON.stringify({
+            type: "set_velocity_command",
+            linear: joystickVel.linear,
+            angular: joystickVel.angular
+        }));
     }
 
     // --- Iniciar Aplicação ---

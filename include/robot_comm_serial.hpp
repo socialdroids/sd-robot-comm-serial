@@ -125,6 +125,7 @@ private:
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
 
     FeedbackMessage last_message_;
+    RobotParameters last_params_;
     CommandMessage last_command_;
     bool last_message_ok_;
 
@@ -188,6 +189,7 @@ private:
         const std::string& _git_hash, const std::string& _git_branch,
         const std::string& _git_tag, const std::string& _build_date,
         float _wheel_distance, float _wheel_diameter);
+    void update_config_info();
     void publish_full_status();
 
     template <typename Func> void try_serial_operation(Func&& func)

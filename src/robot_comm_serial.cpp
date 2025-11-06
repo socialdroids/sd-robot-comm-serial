@@ -727,22 +727,26 @@ void RobotSerial::publish_robot_config()
 {
     if (last_message_.has_parameters())
     {
-        RCLCPP_INFO(this->get_logger(), "LEFT (P=%.2f, I=%.2f, D=%.2f)",
-                    last_message_.parameters().left_pid().k_p(),
-                    last_message_.parameters().left_pid().k_i(),
-                    last_message_.parameters().left_pid().k_d());
-        RCLCPP_INFO(this->get_logger(), "RIGHT (P=%.2f, I=%.2f, D=%.2f)",
-                    last_message_.parameters().right_pid().k_p(),
-                    last_message_.parameters().right_pid().k_i(),
-                    last_message_.parameters().right_pid().k_d());
-        RCLCPP_INFO(this->get_logger(), "LINEAR (P=%.2f, I=%.2f, D=%.2f)",
-                    last_message_.parameters().linear_pid().k_p(),
-                    last_message_.parameters().linear_pid().k_i(),
-                    last_message_.parameters().linear_pid().k_d());
-        RCLCPP_INFO(this->get_logger(), "ANGULAR (P=%.2f, I=%.2f, D=%.2f)\n",
-                    last_message_.parameters().angular_pid().k_p(),
-                    last_message_.parameters().angular_pid().k_i(),
-                    last_message_.parameters().angular_pid().k_d());
+        last_params_ = last_message_.parameters();
+        RCLCPP_INFO(
+            this->get_logger(), "LEFT (P=%.2f, I=%.2f, D=%.2f, EN=%d)",
+            last_params_.left_pid().k_p(), last_params_.left_pid().k_i(),
+            last_params_.left_pid().k_d(), last_params_.left_pid().enabled());
+        RCLCPP_INFO(
+            this->get_logger(), "RIGHT (P=%.2f, I=%.2f, D=%.2f, EN=%d)",
+            last_params_.right_pid().k_p(), last_params_.right_pid().k_i(),
+            last_params_.right_pid().k_d(), last_params_.right_pid().enabled());
+        RCLCPP_INFO(
+            this->get_logger(), "LINEAR (P=%.2f, I=%.2f, D=%.2f, EN=%d)",
+            last_params_.linear_pid().k_p(), last_params_.linear_pid().k_i(),
+            last_params_.linear_pid().k_d(),
+            last_params_.linear_pid().enabled());
+        RCLCPP_INFO(
+            this->get_logger(), "ANGULAR (P=%.2f, I=%.2f, D=%.2f, EN=%d)\n",
+            last_params_.angular_pid().k_p(), last_params_.angular_pid().k_i(),
+            last_params_.angular_pid().k_d(),
+            last_params_.angular_pid().enabled());
+        update_config_info();
     }
 }
 
@@ -813,77 +817,76 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     }
     else if (type == "get_all_configs")
     {
-        json configs;
-        configs["type"] = "current_configs";
-        // Preenche com os valores atuais do robô (ex: lendo parâmetros ROS)
-        configs["configs"] = {
-            {"pid",
-             {
-                 {"linear", {{"p", 1.0}, {"i", 0.1}, {"d", 0.05}}},
-                 {"angular", {{"p", 2.0}, {"i", 0.2}, {"d", 0.1}}},
-                 {"left", {{"p", 1.0}, {"i", 0.0}, {"d", 0.0}}},
-                 {"right", {{"p", 1.0}, {"i", 0.0}, {"d", 0.0}}}
-             }},
-            {"limits",
-             {{"linear_vel", 1.5},
-              {"linear_acc", 0.5},
-              {"angular_vel", 1.0},
-              {"angular_acc", 0.8}}},
-            {"open_loop", false},
-            {"kalman",
-             {// Matriz 5x5 identidade de exemplo
-              {"model",
-               {{1, 0, 0, 0, 0},
-                {0, 1, 0, 0, 0},
-                {0, 0, 1, 0, 0},
-                {0, 0, 0, 1, 0},
-                {0, 0, 0, 0, 1}}},
-              // Matriz 4x4 identidade de exemplo
-              {"measurement",
-               {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}}}}};
-        ws_interface_->send_robot_status(configs);
+        update_config_info();
     }
 
     // --- Lida com comandos SET ---
     else if (type == "set_pid")
     {
         std::string target = data.at("target");
-        double p = data.at("p");
-        double i = data.at("i");
-        double d = data.at("d");
-        RCLCPP_INFO(this->get_logger(),
-                    "Configurando PID para %s: P=%.2f I=%.2f D=%.2f",
-                    target.c_str(), p, i, d);
+
+        double lastP, lastI, lastD, lastEN;
 
         RobotConfig* config = last_command_.mutable_config();
         RobotParameters* parameters = config->mutable_parameters();
+        PIDConfig* cfg = nullptr;
+
         if (target == "linear")
         {
-            PIDConfig* cfg = parameters->mutable_linear_pid();
-            cfg->set_k_p(p);
-            cfg->set_k_i(i);
-            cfg->set_k_d(d);
+            cfg = parameters->mutable_linear_pid();
+            lastP = last_params_.linear_pid().k_p();
+            lastI = last_params_.linear_pid().k_i();
+            lastD = last_params_.linear_pid().k_d();
+            lastEN = last_params_.linear_pid().enabled();
         }
         else if (target == "angular")
         {
-            PIDConfig* cfg = parameters->mutable_angular_pid();
-            cfg->set_k_p(p);
-            cfg->set_k_i(i);
-            cfg->set_k_d(d);
+            cfg = parameters->mutable_angular_pid();
+            lastP = last_params_.angular_pid().k_p();
+            lastI = last_params_.angular_pid().k_i();
+            lastD = last_params_.angular_pid().k_d();
+            lastEN = last_params_.angular_pid().enabled();
         }
         else if (target == "left")
         {
-            PIDConfig* cfg = parameters->mutable_left_pid();
-            cfg->set_k_p(p);
-            cfg->set_k_i(i);
-            cfg->set_k_d(d);
+            cfg = parameters->mutable_left_pid();
+            lastP = last_params_.left_pid().k_p();
+            lastI = last_params_.left_pid().k_i();
+            lastD = last_params_.left_pid().k_d();
+            lastEN = last_params_.left_pid().enabled();
         }
         else if (target == "right")
         {
-            PIDConfig* cfg = parameters->mutable_right_pid();
+            cfg = parameters->mutable_right_pid();
+            lastP = last_params_.linear_pid().k_p();
+            lastI = last_params_.linear_pid().k_i();
+            lastD = last_params_.linear_pid().k_d();
+            lastEN = last_params_.linear_pid().enabled();
+        }
+
+        if (cfg != nullptr)
+        {
+            double p = data.at("p").is_null()
+                           ? lastP
+                           : static_cast<double>(data.at("p"));
+            double i = data.at("i").is_null()
+                           ? lastI
+                           : static_cast<double>(data.at("i"));
+            double d = data.at("d").is_null()
+                           ? lastD
+                           : static_cast<double>(data.at("d"));
+            bool enabled = data.at("enabled").is_null()
+                               ? lastEN
+                               : static_cast<bool>(data.at("enabled"));
+
+            RCLCPP_INFO(this->get_logger(),
+                        "Configurando PID %s: P=%.2f I=%.2f D=%.2f EN=%d",
+                        target.c_str(), p, i, d, enabled);
+
             cfg->set_k_p(p);
             cfg->set_k_i(i);
             cfg->set_k_d(d);
+            cfg->set_enabled(enabled);
         }
     }
     else if (type == "set_limits")
@@ -906,6 +909,14 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
         bool enabled = data.at("enabled");
         RCLCPP_INFO(this->get_logger(), "Modo Malha Aberta: %s",
                     enabled ? "ON" : "OFF");
+        // TODO: Aplicar o modo
+    }
+    else if (type == "set_velocity_command")
+    {
+        float linear = data.at("linear"), angular = data.at("angular");
+        RCLCPP_INFO(this->get_logger(),
+                    "Virtual Joystick: (Linear, Angular) = (%.3f, %.3f)",
+                    linear, angular);
         // TODO: Aplicar o modo
     }
 }
@@ -932,6 +943,78 @@ void RobotSerial::update_ecu_info(
     ws_interface_->send_robot_status(info); // Reutiliza o método de envio
 }
 
+void RobotSerial::update_config_info()
+{
+    json configs;
+    configs["type"] = "current_configs";
+    // Preenche com os valores atuais do robô (ex: lendo parâmetros ROS)
+    struct
+    {
+        float p;
+        float i;
+        float d;
+        bool en;
+    } linear, angular, left, right;
+
+    left.p = last_params_.left_pid().k_p();
+    left.i = last_params_.left_pid().k_i();
+    left.d = last_params_.left_pid().k_d();
+    left.en = last_params_.left_pid().enabled();
+
+    right.p = last_params_.right_pid().k_p();
+    right.i = last_params_.right_pid().k_i();
+    right.d = last_params_.right_pid().k_d();
+    right.en = last_params_.right_pid().enabled();
+
+    linear.p = last_params_.linear_pid().k_p();
+    linear.i = last_params_.linear_pid().k_i();
+    linear.d = last_params_.linear_pid().k_d();
+    linear.en = last_params_.linear_pid().enabled();
+
+    angular.p = last_params_.angular_pid().k_p();
+    angular.i = last_params_.angular_pid().k_i();
+    angular.d = last_params_.angular_pid().k_d();
+    angular.en = last_params_.angular_pid().enabled();
+
+    configs["configs"] = {
+        {"pid",
+         {{"linear",
+           {{"p", linear.p},
+            {"i", linear.i},
+            {"d", linear.d},
+            {"enabled", linear.en}}},
+          {"angular",
+           {{"p", angular.p},
+            {"i", angular.i},
+            {"d", angular.d},
+            {"enabled", angular.en}}},
+          {"left",
+           {{"p", left.p}, {"i", left.i}, {"d", left.d}, {"enabled", left.en}}},
+          {"right",
+           {{"p", right.p},
+            {"i", right.i},
+            {"d", right.d},
+            {"enabled", right.en}}}}},
+        {"limits",
+         {{"linear_vel", 1.5},
+          {"linear_acc", 0.5},
+          {"angular_vel", 1.0},
+          {"angular_acc", 0.8}}},
+        {"open_loop", false},
+        {"kalman",
+         {// Matriz 5x5 identidade de exemplo
+          {"model",
+           {{1, 0, 0, 0, 0},
+            {0, 1, 0, 0, 0},
+            {0, 0, 1, 0, 0},
+            {0, 0, 0, 1, 0},
+            {0, 0, 0, 0, 1}}},
+          // Matriz 4x4 identidade de exemplo
+          {"measurement",
+           {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}}}}};
+    ws_interface_->send_robot_status(configs);
+}
+
 void RobotSerial::publish_full_status()
 {
     if (!connected_)
@@ -955,7 +1038,11 @@ void RobotSerial::publish_full_status()
          {{"linear",
            last_message_.encoder().twist_enc().linear_mm_s() / 1000.0},
           {"angular",
-           last_message_.encoder().twist_enc().angular_trad_s() / 1000.0}}},
+           last_message_.encoder().twist_enc().angular_trad_s() / 1000.0},
+          {"left",
+           last_message_.encoder().twist_enc().left_wheel_mm_s() / 1000.0},
+          {"right",
+           last_message_.encoder().twist_enc().right_wheel_mm_s() / 1000.0}}},
         {"imu", {{"angular", last_message_.imu().gyro().z() / 1000.f}}}};
 
     status["setpoints"] = {
