@@ -164,9 +164,9 @@
                                 D: <span id="current-pid-linear-d">0.0</span>
                             </div>
                             <div class="pid-inputs">
-                                <input type="number" id="pid-linear-p" step="0.01" placeholder="P">
-                                <input type="number" id="pid-linear-i" step="0.01" placeholder="I">
-                                <input type="number" id="pid-linear-d" step="0.01" placeholder="D">
+                                <input type="number" id="pid-linear-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-linear-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-linear-d" step="0.0001" placeholder="D">
                                 <button type="submit" data-target="linear">Enviar</button>
                             </div>
                         </fieldset>
@@ -182,9 +182,9 @@
                                 D: <span id="current-pid-angular-d">0.0</span>
                             </div>
                             <div class="pid-inputs">
-                                <input type="number" id="pid-angular-p" step="0.01" placeholder="P">
-                                <input type="number" id="pid-angular-i" step="0.01" placeholder="I">
-                                <input type="number" id="pid-angular-d" step="0.01" placeholder="D">
+                                <input type="number" id="pid-angular-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-angular-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-angular-d" step="0.0001" placeholder="D">
                                 <button type="submit" data-target="angular">Enviar</button>
                             </div>
                         </fieldset>
@@ -200,9 +200,9 @@
                                 D: <span id="current-pid-left-d">0.0</span>
                             </div>
                             <div class="pid-inputs">
-                                <input type="number" id="pid-left-p" step="0.01" placeholder="P">
-                                <input type="number" id="pid-left-i" step="0.01" placeholder="I">
-                                <input type="number" id="pid-left-d" step="0.01" placeholder="D">
+                                <input type="number" id="pid-left-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-left-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-left-d" step="0.0001" placeholder="D">
                                 <button type="submit" data-target="left">Enviar</button>
                             </div>
                         </fieldset>
@@ -218,9 +218,9 @@
                                 D: <span id="current-pid-right-d">0.0</span>
                             </div>
                             <div class="pid-inputs">
-                                <input type="number" id="pid-right-p" step="0.01" placeholder="P">
-                                <input type="number" id="pid-right-i" step="0.01" placeholder="I">
-                                <input type="number" id="pid-right-d" step="0.01" placeholder="D">
+                                <input type="number" id="pid-right-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-right-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-right-d" step="0.0001" placeholder="D">
                                 <button type="submit" data-target="right">Enviar</button>
                             </div>
                         </fieldset>
@@ -233,13 +233,13 @@
                     <form id="limits-form">
                         <fieldset>
                             <legend>Linear</legend>
-                            <label>Vel. Máx (m/s): <input type="number" id="limit-linear-vel" step="0.1"></label>
-                            <label>Acel. Máx (m/s²): <input type="number" id="limit-linear-acc" step="0.1"></label>
+                            <label>Vel. Máx (m/s): <input type="number" id="limit-linear-vel" step="0.01"></label>
+                            <label>Acel. Máx (m/s²): <input type="number" id="limit-linear-acc" step="0.01"></label>
                         </fieldset>
                         <fieldset>
                             <legend>Angular</legend>
-                            <label>Vel. Máx (rad/s): <input type="number" id="limit-angular-vel" step="0.1"></label>
-                            <label>Acel. Máx (rad/s²): <input type="number" id="limit-angular-acc" step="0.1"></label>
+                            <label>Vel. Máx (rad/s): <input type="number" id="limit-angular-vel" step="0.01"></label>
+                            <label>Acel. Máx (rad/s²): <input type="number" id="limit-angular-acc" step="0.01"></label>
                         </fieldset>
                         <button type="submit">Enviar Limites</button>
                     </form>
