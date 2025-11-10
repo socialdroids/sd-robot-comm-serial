@@ -8,127 +8,133 @@
 
 RobotSerial::RobotSerial()
     : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
-      connected_(false) {
+      connected_(false)
+{
 
-  std::string share_dir =
-      ament_index_cpp::get_package_share_directory("robot_comm_serial");
-  std::string config_file = share_dir + "/config/robot_serial.yaml";
-  RCLCPP_INFO(this->get_logger(), "Loading Config File: %s",
-              config_file.c_str());
+    std::string share_dir =
+        ament_index_cpp::get_package_share_directory("robot_comm_serial");
+    std::string config_file = share_dir + "/config/robot_serial.yaml";
+    RCLCPP_INFO(this->get_logger(), "Loading Config File: %s",
+                config_file.c_str());
 
-  // === CONFIGURAÇÕES
-  YAML::Node config = YAML::LoadFile(config_file);
-  port_ = yaml_get_value<std::string>(config, "serial_port");
-  baud_ = yaml_get_value<unsigned long>(config, "baud_rate");
-  int reception_freq = yaml_get_value<int>(config, "reception_frequency");
-  int reconnection_freq = yaml_get_value<int>(config, "reconnection_frequency");
-  int command_freq = yaml_get_value<int>(config, "command_frequency");
-  fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
-  fake_charging_radius_ =
-      yaml_get_value<double>(config, "fake_charging_radius");
-  fake_charging_fail_count_ = 0;
+    // === CONFIGURAÇÕES
+    YAML::Node config = YAML::LoadFile(config_file);
+    port_ = yaml_get_value<std::string>(config, "serial_port");
+    baud_ = yaml_get_value<unsigned long>(config, "baud_rate");
+    int reception_freq = yaml_get_value<int>(config, "reception_frequency");
+    int reconnection_freq =
+        yaml_get_value<int>(config, "reconnection_frequency");
+    int command_freq = yaml_get_value<int>(config, "command_frequency");
+    fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
+    fake_charging_radius_ =
+        yaml_get_value<double>(config, "fake_charging_radius");
+    fake_charging_fail_count_ = 0;
 
-  RCLCPP_INFO(this->get_logger(), "Config File OK!");
-  RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
-  RCLCPP_INFO(this->get_logger(), "Baud Rate: %ld", baud_);
-  RCLCPP_INFO(this->get_logger(), "Packet Reception Frequency: %d Hz",
-              reception_freq);
-  RCLCPP_INFO(this->get_logger(), "Reconnection Frequency: %d Hz",
-              reconnection_freq);
-  RCLCPP_INFO(this->get_logger(), "Command Update Frequency: %d Hz",
-              command_freq);
-  RCLCPP_INFO(this->get_logger(), "Use Fake Charging: %d", fake_charging_);
+    RCLCPP_INFO(this->get_logger(), "Config File OK!");
+    RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
+    RCLCPP_INFO(this->get_logger(), "Baud Rate: %ld", baud_);
+    RCLCPP_INFO(this->get_logger(), "Packet Reception Frequency: %d Hz",
+                reception_freq);
+    RCLCPP_INFO(this->get_logger(), "Reconnection Frequency: %d Hz",
+                reconnection_freq);
+    RCLCPP_INFO(this->get_logger(), "Command Update Frequency: %d Hz",
+                command_freq);
+    RCLCPP_INFO(this->get_logger(), "Use Fake Charging: %d", fake_charging_);
 
-  // === TÓPICOS
-  // Create a QoS profile for best effort reliability
-  rclcpp::QoS best_effort_qos(10); // History depth of 10
-  best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
+    // === TÓPICOS
+    // Create a QoS profile for best effort reliability
+    rclcpp::QoS best_effort_qos(10); // History depth of 10
+    best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
 
-  robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
-      "robot_base/flags", best_effort_qos);
-  imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
-                                                           best_effort_qos);
-  odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
-      "robot_base/odometry", best_effort_qos);
-  encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
-      "robot_base/encoders", best_effort_qos);
-  bumpers_pub_ = this->create_publisher<sd_msgs::msg::RobotBumpers>(
-      "robot_base/bumpers", best_effort_qos);
-  debug_pub_ = this->create_publisher<sd_msgs::msg::RobotDebug>(
-      "robot_base/debug", best_effort_qos);
-  base_params_pub_ = this->create_publisher<sd_msgs::msg::BaseParams>(
-      "robot_base/params", best_effort_qos);
+    robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
+        "robot_base/flags", best_effort_qos);
+    imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
+                                                             best_effort_qos);
+    odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
+        "robot_base/odometry", best_effort_qos);
+    encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
+        "robot_base/encoders", best_effort_qos);
+    bumpers_pub_ = this->create_publisher<sd_msgs::msg::RobotBumpers>(
+        "robot_base/bumpers", best_effort_qos);
+    debug_pub_ = this->create_publisher<sd_msgs::msg::RobotDebug>(
+        "robot_base/debug", best_effort_qos);
+    base_params_pub_ = this->create_publisher<sd_msgs::msg::BaseParams>(
+        "robot_base/params", best_effort_qos);
 
-  power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
-      "robot_base/power", best_effort_qos);
-  battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
-      "robot_base/battery", best_effort_qos);
+    power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
+        "robot_base/power", best_effort_qos);
+    battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
+        "robot_base/battery", best_effort_qos);
 
-  cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-      "cmd_vel", best_effort_qos, // QoS History Depth
-      std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
+    cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+        "cmd_vel", best_effort_qos, // QoS History Depth
+        std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
 
-  jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-      "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
-      std::bind(&RobotSerial::jump_to_boot_callback, this,
-                std::placeholders::_1));
+    jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
+        std::bind(&RobotSerial::jump_to_boot_callback, this,
+                  std::placeholders::_1));
 
-  connect();
+    connect();
 
-  packet_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds((int)(1e3 / reception_freq)),
-      std::bind(&RobotSerial::packet_callback, this));
-  reconnect_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds((int)(1e3 / reconnection_freq)),
-      std::bind(&RobotSerial::reconnect_callback, this));
-  command_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds((int)(1e3 / command_freq)),
-      std::bind(&RobotSerial::command_callback, this));
+    packet_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds((int)(1e3 / reception_freq)),
+        std::bind(&RobotSerial::packet_callback, this));
+    reconnect_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds((int)(1e3 / reconnection_freq)),
+        std::bind(&RobotSerial::reconnect_callback, this));
+    command_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds((int)(1e3 / command_freq)),
+        std::bind(&RobotSerial::command_callback, this));
 
-  const int gui_frequency = 60;
-  gui_update_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds((int)(1e3 / gui_frequency)),
-      std::bind(&RobotSerial::publish_full_status, this));
+    const int gui_frequency = 30;
+    gui_update_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds((int)(1e3 / gui_frequency)),
+        std::bind(&RobotSerial::publish_full_status, this));
 
-  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-  last_message_ = FeedbackMessage();
-  VelocityCommand *velocity = last_command_.mutable_velocities();
-  velocity->set_angular(0);
-  velocity->set_linear(0);
+    last_message_ = FeedbackMessage();
+    VelocityCommand* velocity = last_command_.mutable_velocities();
+    velocity->set_angular(0);
+    velocity->set_linear(0);
 
-  last_message_ok_ = false;
+    last_message_ok_ = false;
 
-  current_buffer_pos_ = 0;
-  last_packet_time_ = high_resolution_clock::now();
-  packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
+    current_buffer_pos_ = 0;
+    last_packet_time_ = high_resolution_clock::now();
+    packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
 
-  // === WEBSOCKET
-  std::string docroot = "";
+    // === WEBSOCKET
+    std::string docroot = "";
 
-  // Se o caminho não foi fornecido, tenta encontrar automaticamente
-  if (docroot.empty()) {
-    try {
-      docroot =
-          ament_index_cpp::get_package_share_directory("robot_comm_serial") +
-          "/web";
-    } catch (const std::exception &e) {
-      RCLCPP_ERROR(this->get_logger(),
-                   "Falha ao encontrar o docroot. Especifique "
-                   "'docroot_path'. Erro: %s",
-                   e.what());
-      rclcpp::shutdown();
-      return;
+    // Se o caminho não foi fornecido, tenta encontrar automaticamente
+    if (docroot.empty())
+    {
+        try
+        {
+            docroot = ament_index_cpp::get_package_share_directory(
+                          "robot_comm_serial") +
+                      "/web";
+        }
+        catch (const std::exception& e)
+        {
+            RCLCPP_ERROR(this->get_logger(),
+                         "Falha ao encontrar o docroot. Especifique "
+                         "'docroot_path'. Erro: %s",
+                         e.what());
+            rclcpp::shutdown();
+            return;
+        }
     }
-  }
-  RCLCPP_INFO(this->get_logger(), "Servindo arquivos da web de: %s",
-              docroot.c_str());
-  ws_interface_ = std::make_unique<WebsocketInterface>(9002, docroot);
+    RCLCPP_INFO(this->get_logger(), "Servindo arquivos da web de: %s",
+                docroot.c_str());
+    ws_interface_ = std::make_unique<WebsocketInterface>(9002, docroot);
 
-  ws_interface_->register_command_callback(
-      std::bind(&RobotSerial::handle_gui_command, this, _1, _2));
-  ws_interface_->run();
+    ws_interface_->register_command_callback(
+        std::bind(&RobotSerial::handle_gui_command, this, _1, _2));
+    ws_interface_->run();
 }
 
 RobotSerial::~RobotSerial() { ws_interface_->stop(); }
