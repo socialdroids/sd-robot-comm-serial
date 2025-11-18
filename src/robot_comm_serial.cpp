@@ -897,11 +897,9 @@ void RobotSerial::publish_full_status() {
   json status;
   status["type"] = "full_status";
 
-  // Pega o tempo atual (exemplo, idealmente usar o 'now()' do nó)
   double timestamp = this->get_clock()->now().seconds();
   status["timestamp"] = timestamp;
 
-  // Dados Fictícios - Substitua pelos seus dados reais de tópicos/variáveis
   status["velocity"] = {
       {"fusion",
        {{"linear", last_message_.velocities().linear_mm_s() / 1000.0},
@@ -911,9 +909,9 @@ void RobotSerial::publish_full_status() {
         {"angular",
          last_message_.encoder().twist_enc().angular_trad_s() / 1000.0},
         {"left",
-         last_message_.encoder().twist_enc().left_wheel_mm_s() / 1000.0},
+         last_message_.velocities().left_wheel_mm_s() / 1000.0},
         {"right",
-         last_message_.encoder().twist_enc().right_wheel_mm_s() / 1000.0}}},
+         last_message_.velocities().right_wheel_mm_s() / 1000.0}}},
       {"imu", {{"angular", last_message_.imu().gyro().z() / 1000.f}}}};
 
   status["setpoints"] = {
