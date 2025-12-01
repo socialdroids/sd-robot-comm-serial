@@ -123,6 +123,8 @@ private:
     static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
     std::deque<float> packet_frequency_;
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
+    std::chrono::time_point<high_resolution_clock> last_cmd_vel_time_;
+    std::chrono::time_point<high_resolution_clock> last_virtual_cmd_time_;
 
     FeedbackMessage last_message_;
     RobotParameters last_params_;
@@ -191,6 +193,15 @@ private:
         float _wheel_distance, float _wheel_diameter);
     void update_config_info();
     void publish_full_status();
+
+    template <typename TimeResolution>
+    std::chrono::high_resolution_clock::duration::rep timeSince(
+        std::chrono::time_point<high_resolution_clock>& _start)
+    {
+        return duration_cast<TimeResolution>(high_resolution_clock::now() -
+                                             _start)
+            .count();
+    }
 
     template <typename Func> void try_serial_operation(Func&& func)
     {
