@@ -931,6 +931,8 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
         if (timeSince<milliseconds>(last_cmd_vel_time_) > 2e3)
         {
             VelocityCommand* velocity = last_command_.mutable_velocities();
+            if (linear < 0)
+                angular *= -1;
             velocity->set_linear(linear * 1000);
             velocity->set_angular(angular * 1000);
             last_virtual_cmd_time_ = high_resolution_clock::now();
