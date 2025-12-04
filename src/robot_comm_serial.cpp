@@ -398,8 +398,19 @@ void RobotSerial::decode_buffer()
                 FeedbackMessage message;
 
                 // Exclui o valor do CRC
-                bool ok = message.ParseFromArray(
-                    decoded_packet_, decode_result.out_len - sizeof(CRC_t));
+                bool ok = false;
+                try
+                {
+                    bool ok = message.ParseFromArray(
+                        decoded_packet_, decode_result.out_len - sizeof(CRC_t));
+                }
+                catch (const google::protobuf::FatalException& e)
+                {
+                    RCLCPP_ERROR(this->get_logger(),
+                                 "Falha ao encontrar decodificar pacote: %s",
+                                 e.what());
+                }
+
                 if (ok)
                 {
                     RCLCPP_DEBUG(this->get_logger(),
