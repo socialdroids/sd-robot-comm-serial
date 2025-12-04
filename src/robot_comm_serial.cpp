@@ -401,7 +401,7 @@ void RobotSerial::decode_buffer()
                 bool ok = false;
                 try
                 {
-                    bool ok = message.ParseFromArray(
+                    ok = message.ParseFromArray(
                         decoded_packet_, decode_result.out_len - sizeof(CRC_t));
                 }
                 catch (const google::protobuf::FatalException& e)
