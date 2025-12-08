@@ -168,6 +168,7 @@ private:
     void publish_base_params();
     void publish_battery();
     void publish_robot_config();
+    void publish_rtos_info();
 
     /**
      * @brief Determina o estado de carregamento fake baseado na distância para

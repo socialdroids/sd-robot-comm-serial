@@ -1,10 +1,12 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <sstream>
+#include <string>
 
 RobotSerial::RobotSerial()
     : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
@@ -219,7 +221,7 @@ void RobotSerial::packet_callback()
     auto t_end = high_resolution_clock::now();
 
     RCLCPP_INFO_THROTTLE(
-        this->get_logger(), *this->get_clock(), 60000,
+        this->get_logger(), *this->get_clock(), 2000,
         "Feedback Rate: %.2f Hz | Processing Time = %.3f (%.2f, %.2f, %.2f) us",
         packet_frequency(),
         duration_cast<nanoseconds>(t_end - t_begin).count() / 1e3,
@@ -500,6 +502,7 @@ void RobotSerial::publish_data()
     publish_encoders();
     publish_bumpers();
     publish_debug();
+    publish_rtos_info();
     publish_base_params();
     publish_power_status();
     publish_battery();
@@ -750,25 +753,73 @@ void RobotSerial::publish_robot_config()
     if (last_message_.has_parameters())
     {
         last_params_ = last_message_.parameters();
-        RCLCPP_INFO(
+        RCLCPP_DEBUG(
             this->get_logger(), "LEFT (P=%.2f, I=%.2f, D=%.2f, EN=%d)",
             last_params_.left_pid().k_p(), last_params_.left_pid().k_i(),
             last_params_.left_pid().k_d(), last_params_.left_pid().enabled());
-        RCLCPP_INFO(
+        RCLCPP_DEBUG(
             this->get_logger(), "RIGHT (P=%.2f, I=%.2f, D=%.2f, EN=%d)",
             last_params_.right_pid().k_p(), last_params_.right_pid().k_i(),
             last_params_.right_pid().k_d(), last_params_.right_pid().enabled());
-        RCLCPP_INFO(
+        RCLCPP_DEBUG(
             this->get_logger(), "LINEAR (P=%.2f, I=%.2f, D=%.2f, EN=%d)",
             last_params_.linear_pid().k_p(), last_params_.linear_pid().k_i(),
             last_params_.linear_pid().k_d(),
             last_params_.linear_pid().enabled());
-        RCLCPP_INFO(
+        RCLCPP_DEBUG(
             this->get_logger(), "ANGULAR (P=%.2f, I=%.2f, D=%.2f, EN=%d)\n",
             last_params_.angular_pid().k_p(), last_params_.angular_pid().k_i(),
             last_params_.angular_pid().k_d(),
             last_params_.angular_pid().enabled());
         update_config_info();
+    }
+}
+
+void RobotSerial::publish_rtos_info()
+{
+    if (last_message_.has_info() && last_message_.info().has_rtos_tasks())
+    {
+        std::string data;
+        char aux[100];
+
+        char state[6][10] = {
+            "RUNNING",   // A task is querying the state of itself, so must be
+                         // running.
+            "READY",     // The task being queried is in a read or pending ready
+                         // list.
+            "BLOCKED",   // The task being queried is in the Blocked state.
+            "SUSPENDED", // The task being queried is in the Suspended state, or
+                         // is in the Blocked state with an infinite time out.
+            "DELETED",   // The task being queried has been deleted, but its TCB
+                         // has not yet been freed.
+            "INVALID"    // Used as an 'invalid state' value.
+        };
+
+        snprintf(aux, sizeof(aux), "\n%s) %-18s:%-10s %s %s\n", "ID", "Name",
+                 "State", "Usage(%)", "StackFree");
+        data = aux;
+
+        for (size_t n = 0;
+             n < last_message_.info().rtos_tasks().task_info_size(); n++)
+        {
+            snprintf(
+                aux, sizeof(aux), "%2d) %-18s:%-10s %3.2f%%  %4i\n",
+                last_message_.info().rtos_tasks().task_info(n).id(),
+                last_message_.info().rtos_tasks().task_info(n).name().c_str(),
+                state[last_message_.info().rtos_tasks().task_info(n).state()],
+                last_message_.info().rtos_tasks().task_info(n).usage(),
+                last_message_.info()
+                    .rtos_tasks()
+                    .task_info(n)
+                    .stack_free()); // The minimum amount of stack space that
+                                    // has remained for the task since the task
+                                    // was created.  The closer this value is to
+                                    // zero the closer the task has come to
+                                    // overflowing its stack.
+            data += aux;
+        }
+        RCLCPP_INFO(this->get_logger(), "%s", data.c_str());
+        last_message_.mutable_info()->clear_rtos_tasks();
     }
 }
 
@@ -829,7 +880,7 @@ bool RobotSerial::fake_charging_status()
 
 void RobotSerial::handle_gui_command(const std::string& type, const json& data)
 {
-    RCLCPP_INFO(this->get_logger(), "Comando recebido da GUI: %s",
+    RCLCPP_DEBUG(this->get_logger(), "Comando recebido da GUI: %s",
                 type.c_str());
 
     // --- Responde a solicitações GET ---
@@ -936,7 +987,7 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     else if (type == "set_velocity_command")
     {
         float linear = data.at("linear"), angular = data.at("angular");
-        RCLCPP_INFO(this->get_logger(),
+        RCLCPP_DEBUG(this->get_logger(),
                     "Virtual Joystick: (Linear, Angular) = (%.3f, %.3f)",
                     linear, angular);
         if (timeSince<milliseconds>(last_cmd_vel_time_) > 2e3)

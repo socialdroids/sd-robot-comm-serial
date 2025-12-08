@@ -83,6 +83,21 @@ message EncoderStatus
   int32 ppr = 7;
 }
 
+message RTOSTaskData
+{
+  string name = 1 [(nanopb).max_size = 20];
+  int32 id = 2;
+  int32 state = 3;
+  float usage = 4;
+  int32 stack_free = 5;
+  float update_rate = 6;
+}
+
+message RTOSData
+{
+  repeated RTOSTaskData task_info = 1 [(nanopb).max_count = 20];
+}
+
 message RobotInfo
 {
   RobotHardware hardware_info = 1;
@@ -91,6 +106,7 @@ message RobotInfo
   optional string debug_data = 4 [(nanopb).max_size = 500];
   optional BuildInfo build_data = 5;
   optional BuildInfo power_build_data = 6;
+  RTOSData rtos_tasks = 7;
 }
 
 message FeedbackMessage
