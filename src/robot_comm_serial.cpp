@@ -260,8 +260,19 @@ void RobotSerial::command_callback()
         velocity->set_angular(0);
     }
 
-    bool ok = last_command_.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
-    size_t message_sz = last_command_.ByteSizeLong();
+    bool ok = false;
+    size_t message_sz = 0;
+
+    try
+    {
+        ok = last_command_.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
+        message_sz = last_command_.ByteSizeLong();
+    }
+    catch (const google::protobuf::FatalException& e)
+    {
+        RCLCPP_ERROR(this->get_logger(),
+                     "Falha ao encontrar codificar pacote: %s", e.what());
+    }
 
     if (ok)
     {
@@ -881,7 +892,7 @@ bool RobotSerial::fake_charging_status()
 void RobotSerial::handle_gui_command(const std::string& type, const json& data)
 {
     RCLCPP_DEBUG(this->get_logger(), "Comando recebido da GUI: %s",
-                type.c_str());
+                 type.c_str());
 
     // --- Responde a solicitações GET ---
     if (type == "get_ecu_info")
@@ -988,8 +999,8 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     {
         float linear = data.at("linear"), angular = data.at("angular");
         RCLCPP_DEBUG(this->get_logger(),
-                    "Virtual Joystick: (Linear, Angular) = (%.3f, %.3f)",
-                    linear, angular);
+                     "Virtual Joystick: (Linear, Angular) = (%.3f, %.3f)",
+                     linear, angular);
         if (timeSince<milliseconds>(last_cmd_vel_time_) > 2e3)
         {
             VelocityCommand* velocity = last_command_.mutable_velocities();
