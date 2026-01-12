@@ -58,7 +58,9 @@ message IMU
 {
   Array3D acc = 1;
   Array3D gyro = 2;
-  int32 temperature = 3;
+  float temperature = 3;
+  Angle angle = 4;
+  sint64 timestamp = 5;
 }
 
 message Encoder

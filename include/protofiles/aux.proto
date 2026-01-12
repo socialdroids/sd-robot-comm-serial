@@ -8,6 +8,13 @@ message Array3D
   sint32 z = 3;
 }
 
+message Angle
+{
+  float roll = 1;
+  float pitch = 2;
+  float yaw = 3;
+}
+
 message PowerStatus
 {
   int32 voltage_mv = 1;

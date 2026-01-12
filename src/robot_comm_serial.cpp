@@ -546,16 +546,28 @@ void RobotSerial::publish_imu()
     msg.linear_acceleration.x = last_message_.imu().acc().x() / 1000.f;
     msg.linear_acceleration.y = last_message_.imu().acc().y() / 1000.f;
     msg.linear_acceleration.z = last_message_.imu().acc().z() / 1000.f;
+
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
 
+    tf2::Quaternion q;
+    q.setRPY(last_message_.imu().angle().roll(),
+             last_message_.imu().angle().pitch(),
+             last_message_.imu().angle().yaw());
+    msg.orientation.x = q.x();
+    msg.orientation.y = q.y();
+    msg.orientation.z = q.z();
+    msg.orientation.w = q.w();
+
     // RCLCPP_INFO_THROTTLE(
     //     this->get_logger(), *this->get_clock(), 100,
-    //     "Robot Feedback IMU| X: %d | Y: %d | Theta: %d",
+    //     "Robot Feedback IMU| aX: %d | aY: %d | vW: %d | T: %.2f | t: %ld",
     //     last_message_.imu().acc().x(),
     //     last_message_.imu().acc().y(),
-    //     last_message_.imu().gyro().z());
+    //     last_message_.imu().gyro().z(),
+    //     last_message_.imu().temperature(),
+    //     last_message_.imu().timestamp());
 
     imu_pub_->publish(msg);
 }
