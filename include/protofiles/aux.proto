@@ -1,6 +1,14 @@
 syntax = "proto3";
 import "nanopb.proto";
 
+enum RobotState
+{
+  ROBOT_STATE_UNSPECIFIED = 0;
+  ROBOT_STATE_MANUAL = 1;
+  ROBOT_STATE_AUTO = 2;
+  ROBOT_STATE_STAND_BY = 3;
+}
+
 message Array3D
 {
   sint32 x = 1;

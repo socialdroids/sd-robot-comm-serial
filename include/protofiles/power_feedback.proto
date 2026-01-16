@@ -8,3 +8,10 @@ message PowerFeedbackMessage
   StandBy stand_by = 2;
   string debug_data = 3 [(nanopb).max_size = 500];
 }
+
+message PowerCommandMessage
+{
+  optional WakeUpConfig schedule = 1;
+  optional int64 set_timestamp = 2;
+  optional RobotState set_state = 3;
+}

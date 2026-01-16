@@ -50,6 +50,7 @@ find_package(rclcpp REQUIRED)
 
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(tf2 REQUIRED)
@@ -66,6 +67,7 @@ set(DEPENDENCIES
   geometry_msgs
   pluginlib
   nav_msgs
+  sensor_msgs
   Protobuf
   sd_msgs
   tf2

@@ -1,0 +1,54 @@
+syntax = "proto3";
+import "nanopb.proto";
+
+enum CommandType
+{
+  COMMAND_TYPE_UNSPECIFIED = 0;
+  COMMAND_TYPE_VELOCITY = 1;
+  COMMAND_TYPE_ANGLE = 2;
+}
+
+enum OTAStatus
+{
+  OTA_STATUS_UNSPECIFIED = 0;
+  OTA_STATUS_WAITING = 1;
+  OTA_STATUS_CONNECTED = 2;
+  OTA_STATUS_RUNNING = 3;
+  OTA_STATUS_CONNECTION_TIMEOUT = 4;
+  OTA_STATUS_BEGIN_UPDATE = 5;
+  OTA_STATUS_ABORT_UPDATE = 6;
+}
+
+message OTAUpdate
+{
+  OTAStatus update = 1;
+  string ssid = 2 [(nanopb).max_size = 50];
+  string pwd = 3 [(nanopb).max_size = 50];
+}
+
+message OTAFeedback
+{
+  OTAStatus status = 1;
+  string driver_ip = 2 [(nanopb).max_size = 20];
+}
+
+message DriverCommand
+{
+  int64 count = 1;
+  bool enable = 2;
+  float velocity = 3;
+  float angle = 4;
+  CommandType type = 5;
+  optional OTAUpdate ota_update = 6;
+}
+
+message DriverFeedback
+{
+  int64 count = 1;
+  float velocity = 2;
+  float position = 3;
+  float current = 4;
+  int64 timestamp = 5;
+  bool enabled = 6;
+  optional OTAFeedback ota_feedback = 7;
+}
