@@ -8,6 +8,69 @@
 #include <sstream>
 #include <string>
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
+
+volatile bool finished = true;
+Mix_Chunk* sound = nullptr;
+
+void finishedCallback(int _ch)
+{
+    if (sound != nullptr)
+    {
+        Mix_FreeChunk(sound);
+    }
+    finished = true;
+    std::cerr << "Music finished!\n";
+    // Mix_CloseAudio();
+}
+
+int setupAudio()
+{
+    // Initialize SDL
+    if (SDL_Init(SDL_INIT_AUDIO) < 0)
+    {
+        std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
+                  << std::endl;
+        return 1;
+    }
+
+    // Initialize SDL_mixer
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
+    {
+        std::cerr << "SDL_mixer could not initialize! SDL_mixer Error: "
+                  << Mix_GetError() << std::endl;
+        // SDL_Quit();
+        return 1;
+    }
+}
+
+int playSound(std::string _path)
+{
+    std::cout << "Play " << _path << std::endl;
+    // Load WAV file
+    sound = Mix_LoadWAV(_path.c_str());
+    if (sound == nullptr)
+    {
+        std::cerr << "Failed to load sound effect! SDL_mixer Error: "
+                  << Mix_GetError() << std::endl;
+    }
+    else
+    {
+        // Play the sound (channel -1 finds the first available channel, 0 loops
+        // once, etc.)
+        Mix_ChannelFinished(finishedCallback);
+        Mix_PlayChannel(-1, sound, 0);
+
+        // Wait while the sound is playing (simple wait, a real application
+        // would use a loop/event system) SDL_Delay(2000);
+
+        // Free the sound effect
+        // Mix_FreeChunk(sound);
+    }
+    return 0;
+}
+
 RobotSerial::RobotSerial()
     : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
       connected_(false)
@@ -77,6 +140,7 @@ RobotSerial::RobotSerial()
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
 
+    setupAudio();
     connect();
 
     packet_timer_ = this->create_wall_timer(
@@ -1124,6 +1188,33 @@ void RobotSerial::publish_full_status()
     if (!connected_)
     {
         return;
+    }
+
+    {
+        const std::string share_dir =
+            ament_index_cpp::get_package_share_directory("robot_comm_serial");
+        const std::array<std::string, 10> music_files = 
+            {
+                share_dir + "/config/r2-d2.mp3",
+                share_dir + "/config/1-screaming.mp3",
+                share_dir + "/config/5.mp3",
+                share_dir + "/config/10.mp3",
+                share_dir + "/config/12.mp3",
+                share_dir + "/config/19.mp3",
+                share_dir + "/config/acknowledged-2.mp3",
+                share_dir + "/config/acknowledged.mp3",
+                share_dir + "/config/hee-hee.mp3",
+                share_dir + "/config/worried.mp3"
+            };
+        static double dt = this->get_clock()->now().seconds();
+
+        if (finished && this->get_clock()->now().seconds() - dt > 5)
+        {
+            dt = this->get_clock()->now().seconds();
+
+            size_t index = std::rand() % (music_files.size());
+            int ok = playSound(music_files.at(index).c_str());
+        }
     }
 
     json status;

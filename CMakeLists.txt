@@ -59,7 +59,10 @@ find_package(tf2_geometry_msgs REQUIRED)
 
 find_package(sd_msgs REQUIRED)
 
+find_package(SDL2 REQUIRED)
+
 include_directories(include)
+include_directories(${SDL2_INCLUDE_DIRS})
 
 # Define a list of dependencies
 set(DEPENDENCIES
@@ -108,13 +111,21 @@ target_link_libraries(proto_lib ${Protobuf_LIBRARIES})
 
 message("Protofiles OK!")
 
+
+# Audio
+include(FindPkgConfig)
+pkg_check_modules(SDL2_Mixer REQUIRED IMPORTED_TARGET SDL2_mixer)
+find_package(SDL2 REQUIRED)
+include_directories(${SDL2_INCLUDE_DIRS})
+# Audio
+
 add_subdirectory(cmake/serial)
 
 # add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
 add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c)
 
 target_link_libraries(${PROJECT_NAME} Websockets proto_lib ${Protobuf_LIBRARIES} serial 
-    yaml-cpp::yaml-cpp nlohmann_json::nlohmann_json)
+    yaml-cpp::yaml-cpp nlohmann_json::nlohmann_json SDL2::SDL2 PkgConfig::SDL2_Mixer)
 
 ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 
