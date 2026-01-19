@@ -21,6 +21,8 @@
 
 #include "websocket_interface.hpp"
 
+#include "navigation_tester.hpp"
+
 #include "cobs.h"
 #include "command.pb.h"
 #include "feedback.pb.h"
@@ -112,6 +114,7 @@ private:
     rclcpp::TimerBase::SharedPtr gui_update_timer_;
 
     std::unique_ptr<WebsocketInterface> ws_interface_;
+    std::unique_ptr<NavigationTester> nav_tester_;
 
     size_t packet_size_;
     uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
@@ -192,6 +195,7 @@ private:
         const std::string& _git_hash, const std::string& _git_branch,
         const std::string& _git_tag, const std::string& _build_date,
         float _wheel_distance, float _wheel_diameter);
+    void update_nav_info();
     void update_config_info();
     void publish_full_status();
 

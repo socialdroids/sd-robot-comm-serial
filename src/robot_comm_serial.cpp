@@ -201,6 +201,8 @@ RobotSerial::RobotSerial()
     ws_interface_->register_command_callback(
         std::bind(&RobotSerial::handle_gui_command, this, _1, _2));
     ws_interface_->run();
+
+    nav_tester_ = std::make_unique<NavigationTester>();
 }
 
 RobotSerial::~RobotSerial()
@@ -800,6 +802,8 @@ void RobotSerial::publish_base_params()
                         msg.build_data.commit_hash, msg.build_data.branch_name,
                         msg.build_data.tag, msg.build_data.build_date,
                         msg.wheel_distance, msg.wheel_diameter);
+
+        update_nav_info();
     }
 
     base_params_pub_->publish(msg);
@@ -1087,6 +1091,29 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
             last_virtual_cmd_time_ = high_resolution_clock::now();
         }
     }
+    else if (type == "record_poses")
+    {
+        bool enabled = data.at("enabled");
+        nav_tester_->recordPoses(enabled);
+        RCLCPP_INFO(this->get_logger(), "Record Poses: %d", enabled);
+    }
+    else if (type == "test_nav")
+    {
+        std::string button = data.at("button");
+        if (button == "start")
+        {
+            nav_tester_->start();
+        }
+        else if (button == "stop")
+        {
+            nav_tester_->stop();
+        }
+        else
+        {
+            RCLCPP_ERROR(this->get_logger(), "Valor desconhecido para test_nav!");
+        }
+        RCLCPP_INFO(this->get_logger(), "Test Navigation: %s", button.c_str());
+    }
 }
 
 void RobotSerial::update_ecu_info(
@@ -1108,6 +1135,29 @@ void RobotSerial::update_ecu_info(
                     {"git_branch", _git_branch},
                     {"git_tag", _git_tag},
                     {"build_date", _build_date}};
+    ws_interface_->send_robot_status(info); // Reutiliza o método de envio
+}
+
+void RobotSerial::update_nav_info()
+{
+    json info;
+    json pose;
+
+    pose["x"] = 0.0;
+    pose["y"] = 0.0;
+    pose["yaw"] = 0.0;
+
+    info["type"] = "nav_info";
+    info["info"] = {{"status", nav_tester_->status()},
+                    {"last_pose", pose},
+                    {"navigation_status", "ativo"},
+                    {"localization_status", "ativo"},
+                    {"nav_feedback", "ativo"},
+                    {"rem_poses", 0},
+                    {"eta", 0.0},
+                    {"rem_distance", 0.0},
+                    {"total_time", 0.0},
+                    {"recoveries", 0}};
     ws_interface_->send_robot_status(info); // Reutiliza o método de envio
 }
 
@@ -1193,22 +1243,20 @@ void RobotSerial::publish_full_status()
     {
         const std::string share_dir =
             ament_index_cpp::get_package_share_directory("robot_comm_serial");
-        const std::array<std::string, 10> music_files = 
-            {
-                share_dir + "/config/r2-d2.mp3",
-                share_dir + "/config/1-screaming.mp3",
-                share_dir + "/config/5.mp3",
-                share_dir + "/config/10.mp3",
-                share_dir + "/config/12.mp3",
-                share_dir + "/config/19.mp3",
-                share_dir + "/config/acknowledged-2.mp3",
-                share_dir + "/config/acknowledged.mp3",
-                share_dir + "/config/hee-hee.mp3",
-                share_dir + "/config/worried.mp3"
-            };
+        const std::array<std::string, 10> music_files = {
+            share_dir + "/config/r2-d2.mp3",
+            share_dir + "/config/1-screaming.mp3",
+            share_dir + "/config/5.mp3",
+            share_dir + "/config/10.mp3",
+            share_dir + "/config/12.mp3",
+            share_dir + "/config/19.mp3",
+            share_dir + "/config/acknowledged-2.mp3",
+            share_dir + "/config/acknowledged.mp3",
+            share_dir + "/config/hee-hee.mp3",
+            share_dir + "/config/worried.mp3"};
         static double dt = this->get_clock()->now().seconds();
 
-        if (finished && this->get_clock()->now().seconds() - dt > 5)
+        if (finished && this->get_clock()->now().seconds() - dt > 10)
         {
             dt = this->get_clock()->now().seconds();
 
@@ -1252,13 +1300,13 @@ void RobotSerial::publish_full_status()
                           {"right_pulses", last_message_.encoder().right()}};
     status["gauges"] = {
         {"battery_level", last_message_.power_status().battery_percent()},
-        {"motor_current_left",
+        {"motor_current",
          last_message_.power_status().driver_current_ma() / 1000.f},
-        {"motor_current_right", 0.0},
         {"charging_status",
          last_message_.power_status().charging() ? "idle" : "discharging"},
         {"charging_current",
          last_message_.power_status().charging_current_ma() / 1000.f},
+        {"temp_imu", last_message_.imu().temperature()},
         {"temp_ecu", last_message_.power_status().temperature()},
         {"temp_mcu", last_message_.power_status().internal_temperature()}};
 

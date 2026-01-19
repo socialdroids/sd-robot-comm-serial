@@ -49,6 +49,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
 find_package(geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -69,6 +70,7 @@ set(DEPENDENCIES
   rclcpp
   geometry_msgs
   pluginlib
+  nav2_msgs
   nav_msgs
   sensor_msgs
   Protobuf
@@ -122,7 +124,7 @@ include_directories(${SDL2_INCLUDE_DIRS})
 add_subdirectory(cmake/serial)
 
 # add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
-add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c)
+add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c src/navigation_tester.cpp)
 
 target_link_libraries(${PROJECT_NAME} Websockets proto_lib ${Protobuf_LIBRARIES} serial 
     yaml-cpp::yaml-cpp nlohmann_json::nlohmann_json SDL2::SDL2 PkgConfig::SDL2_Mixer)

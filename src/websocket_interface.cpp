@@ -98,7 +98,6 @@ void WebsocketInterface::on_message(connection_hdl hdl,
 
         // --- Roteamento de Mensagens da GUI ---
 
-        // Tipos de SET (enviados pela GUI)
         if (type == "set_pid")
         {
             // Este callback agora precisa saber o "target"
@@ -141,16 +140,18 @@ void WebsocketInterface::on_message(connection_hdl hdl,
             if (m_command_callback)
                 m_command_callback(type, data);
         }
-        // Tipos de GET (solicitações da GUI)
         else if (type == "get_ecu_info")
         {
-            // O nó ROS deve responder a isso
             if (m_command_callback)
                 m_command_callback(type, data);
         }
-        else if (type == "get_all_configs")
+        else if (type == "record_poses")
         {
-            // O nó ROS deve responder a isso
+            if (m_command_callback)
+                m_command_callback(type, data);
+        }
+        else if (type == "test_nav")
+        {
             if (m_command_callback)
                 m_command_callback(type, data);
         }

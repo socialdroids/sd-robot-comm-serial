@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const statusDiv = document.getElementById("connection-status");
     const logContainer = document.getElementById("log-messages");
     const ecuInfoDiv = document.getElementById("ecu-info");
+    const navInfoDiv = document.getElementById("nav-info");
 
     // Indicadores
     const indicators = {
@@ -132,6 +133,9 @@ document.addEventListener("DOMContentLoaded", () => {
             case "ecu_info":
                 updateEcuInfo(data.info);
                 break;
+            case "nav_info":
+                updateNavInfo(data.info);
+                break;
             case "current_configs":
                 updateConfigForms(data.configs);
                 break;
@@ -150,9 +154,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 datasets: [
                     { label: 'Fusão Linear', data: [], borderColor: '#3498db', tension: 0.1, hidden: false },
                     { label: 'Fusão Angular', data: [], borderColor: '#e74c3c', tension: 0.1, hidden: false },
-                    { label: 'Encoder Linear', data: [], borderColor: '#2ecc71', tension: 0.1, hidden: true },
-                    { label: 'Encoder Angular', data: [], borderColor: '#f1c40f', tension: 0.1, hidden: true },
-                    { label: 'IMU Angular', data: [], borderColor: '#9b59b6', tension: 0.1, hidden: true },
+                    { label: 'Encoder Linear', data: [], borderColor: '#2ecc71', tension: 0.1, hidden: false },
+                    { label: 'Encoder Angular', data: [], borderColor: '#f1c40f', tension: 0.1, hidden: false },
+                    { label: 'IMU Angular', data: [], borderColor: '#9b59b6', tension: 0.1, hidden: false },
                     { label: 'Setpoint Linear', data: [], borderColor: '#3498db', borderDash: [5, 5], tension: 0.1, hidden: false },
                     { label: 'Setpoint Angular', data: [], borderColor: '#e74c3c', borderDash: [5, 5], tension: 0.1, hidden: false }
                 ]
@@ -235,29 +239,38 @@ document.addEventListener("DOMContentLoaded", () => {
             strokeColor: '#444', generateGradient: true
         };
 
+        let tempOpts = {
+            angle: -0.25,
+            lineWidth: 0.2,
+            radiusScale: 0.9,
+            pointer: { length: 0.6, strokeWidth: 0.035, color: '#e0e0e0' },
+            // staticLabels: { font: "12px sans-serif", labels: [0, 50, 100], color: "#e0e0e0" },
+            staticZones: [
+                {strokeStyle: "#f44336", min: 80, max: 100},
+                {strokeStyle: "#f1c40f", min: 50, max: 80},
+                {strokeStyle: "#4caf50", min: 0, max: 50}
+            ],
+            limitMax: true, limitMin: true,
+            colorStart: '#f44336', colorStop: '#4caf50',
+            strokeColor: '#444', generateGradient: true
+        };
+
         gauges.battery = new Gauge(document.getElementById('gauge-battery')).setOptions(gaugeOpts);
         gauges.battery.maxValue = 100; gauges.battery.set(0);
 
-        gauges.motorLeft = new Gauge(document.getElementById('gauge-motor-left')).setOptions(gaugeOpts);
-        gauges.motorLeft.maxValue = 10; gauges.motorLeft.set(0);
-
-        gauges.motorRight = new Gauge(document.getElementById('gauge-motor-right')).setOptions(gaugeOpts);
-        gauges.motorRight.maxValue = 10; gauges.motorRight.set(0);
+        gauges.motorCurrent = new Gauge(document.getElementById('gauge-motor')).setOptions(gaugeOpts);
+        gauges.motorCurrent.maxValue = 10; gauges.motorCurrent.set(0);
 
         gauges.chargeCurrent = new Gauge(document.getElementById('gauge-charge-current')).setOptions(gaugeOpts);
         gauges.chargeCurrent.maxValue = 5; gauges.chargeCurrent.set(0);
 
-        gaugeOpts.staticZones[0].min = 80; // Red
-        gaugeOpts.staticZones[0].max = 100;
-        gaugeOpts.staticZones[1].min = 50; // Yellow
-        gaugeOpts.staticZones[1].max = 80;
-        gaugeOpts.staticZones[2].min = 0; // Green
-        gaugeOpts.staticZones[2].max = 50;
+        gauges.tempIMU = new Gauge(document.getElementById('gauge-temp-imu')).setOptions(tempOpts);
+        gauges.tempIMU.maxValue = 100; gauges.tempIMU.set(0);
 
-        gauges.tempECU = new Gauge(document.getElementById('gauge-temp-ecu')).setOptions(gaugeOpts);
+        gauges.tempECU = new Gauge(document.getElementById('gauge-temp-ecu')).setOptions(tempOpts);
         gauges.tempECU.maxValue = 100; gauges.tempECU.set(0);
 
-        gauges.tempMCU = new Gauge(document.getElementById('gauge-temp-mcu')).setOptions(gaugeOpts);
+        gauges.tempMCU = new Gauge(document.getElementById('gauge-temp-mcu')).setOptions(tempOpts);
         gauges.tempMCU.maxValue = 100; gauges.tempMCU.set(0);
     }
     
@@ -321,14 +334,14 @@ document.addEventListener("DOMContentLoaded", () => {
         gauges.battery.set(data.gauges.battery_level);
         document.getElementById('gauge-val-battery').textContent = data.gauges.battery_level.toFixed(1);
 
-        gauges.motorLeft.set(data.gauges.motor_current_left);
-        document.getElementById('gauge-val-motor-left').textContent = data.gauges.motor_current_left.toFixed(1);
-
-        gauges.motorRight.set(data.gauges.motor_current_right);
-        document.getElementById('gauge-val-motor-right').textContent = data.gauges.motor_current_right.toFixed(1);
+        gauges.motorCurrent.set(data.gauges.motor_current);
+        document.getElementById('gauge-val-motor').textContent = data.gauges.motor_current.toFixed(1);
 
         gauges.chargeCurrent.set(data.gauges.charging_current);
         document.getElementById('gauge-val-charge-current').textContent = data.gauges.charging_current.toFixed(1);
+
+        gauges.tempIMU.set(data.gauges.temp_imu);
+        document.getElementById('gauge-val-temp-imu').textContent = data.gauges.temp_imu.toFixed(1);
 
         gauges.tempECU.set(data.gauges.temp_ecu);
         document.getElementById('gauge-val-temp-ecu').textContent = data.gauges.temp_ecu.toFixed(1);
@@ -385,6 +398,25 @@ Git Commit:       ${info.git_hash || 'N/A'}
 Git Branch:       ${info.git_branch || 'N/A'}
 Git Tag:          ${info.git_tag || 'N/A'}
 Data do Build:    ${info.build_date || 'N/A'}`;
+    }
+
+    function updateNavInfo(info) {
+        info.last_pose.x = info.last_pose.x.toFixed(3);
+        info.last_pose.y = info.last_pose.y.toFixed(3);
+        info.last_pose.yaw = info.last_pose.yaw.toFixed(3);
+
+        let last_pose = `(${info.last_pose.x} ; ${info.last_pose.y} @ ${info.last_pose.yaw})`
+        
+        navInfoDiv.textContent = `Status:   ${info.status || 'Desativado'}
+Última Pose:        ${last_pose    || '(x;y @ yaw)'}
+Navegação:          ${info.navigation_status || 'Desconhecido'}
+Localização:        ${info.localization_status  || 'Desconhecido'}
+Feedback:           ${info.nav_feedback || 'Desconhecido'}
+Poses Restantes:    ${info.rem_poses || '0'}
+ETA:                ${info.eta       || '0'} s
+Distância Restante: ${info.rem_distance || '0'} m
+Tempo Total:        ${info.total_time   || '0'} s
+Recuperações:       ${info.recoveries   || '0'}`;
     }
 
     // --- Desenho da Pose ---
@@ -558,6 +590,29 @@ Data do Build:    ${info.build_date || 'N/A'}`;
                 ws.send(JSON.stringify(payload));
                 addLog(`PID ${target} ${e.target.checked ? 'Habilitado' : 'Desabilitado'}`);
             });
+        });
+
+        document.getElementById("nav-poses-form").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const target = e.submitter.dataset.target;
+            if (!target) return;
+
+            const payload = {
+                type: "test_nav",
+                button: target
+            }
+            ws.send(JSON.stringify(payload));
+            addLog(`Enviando Nav-${target}`);
+        });
+
+        document.getElementById("record-poses-check").addEventListener('change', (e) => {
+
+            const payload = {
+                type: "record_poses",
+                enabled: e.target.checked
+            }
+            ws.send(JSON.stringify(payload));
+            addLog(`Gravar Poses: ${e.target.checked? 'Habilitado' : 'Desabilitado' }`);
         });
 
         // Limites

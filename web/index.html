@@ -38,9 +38,9 @@
                     <div class="chart-toggles" id="vel-toggles">
                         <label><input type="checkbox" data-dataset="vel_linear_fusion" checked> Fusão Linear</label>
                         <label><input type="checkbox" data-dataset="vel_angular_fusion" checked> Fusão Angular</label>
-                        <label><input type="checkbox" data-dataset="vel_linear_encoder"> Encoder Linear</label>
-                        <label><input type="checkbox" data-dataset="vel_angular_encoder"> Encoder Angular</label>
-                        <label><input type="checkbox" data-dataset="vel_angular_imu"> IMU Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_linear_encoder" checked> Encoder Linear</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_encoder" checked> Encoder Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_imu" checked> IMU Angular</label>
                         <label><input type="checkbox" data-dataset="setpoint_linear" checked> Setpoint Linear</label>
                         <label><input type="checkbox" data-dataset="setpoint_angular" checked> Setpoint Angular</label>
                     </div>
@@ -89,19 +89,19 @@
                             <div class="gauge-value" id="gauge-val-battery">0.0</div>
                         </div>
                         <div>
-                            <canvas id="gauge-motor-left"></canvas>
-                            <div class="gauge-label">Corrente Esq. (A)</div>
-                            <div class="gauge-value" id="gauge-val-motor-left">0.0</div>
-                        </div>
-                        <div>
-                            <canvas id="gauge-motor-right"></canvas>
-                            <div class="gauge-label">Corrente Dir. (A)</div>
-                            <div class="gauge-value" id="gauge-val-motor-right">0.0</div>
+                            <canvas id="gauge-motor"></canvas>
+                            <div class="gauge-label">Corrente Driver (A)</div>
+                            <div class="gauge-value" id="gauge-val-motor">0.0</div>
                         </div>
                         <div>
                             <canvas id="gauge-charge-current"></canvas>
                             <div class="gauge-label">Corrente Carga (A)</div>
                             <div class="gauge-value" id="gauge-val-charge-current">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-temp-imu"></canvas>
+                            <div class="gauge-label">Temp. IMU (⁰C)</div>
+                            <div class="gauge-value" id="gauge-val-temp-imu">0.0</div>
                         </div>
                         <div>
                             <canvas id="gauge-temp-ecu"></canvas>
@@ -278,6 +278,26 @@
                     <div class="joystick-values">
                         <span>Linear: <span id="joystick-val-linear">0.00</span> m/s</span>
                         <span>Angular: <span id="joystick-val-angular">0.00</span> rad/s</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Navegação</h2>
+
+                    <form id="nav-poses-form" class="nav-poses-container">
+                        <div>
+                            <label for="record-poses-check">Gravar Poses</label>
+                            <p></p>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="record-poses-check">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <button class="start-button" type="submit" data-target="start">Iniciar</button>
+                        <button class="stop-button" type="submit" data-target="stop">Parar</button>
+                    </form>
+                    <div class="card">
+                        <h2>Informações da Navegação</h2>
+                        <pre id="nav-info">Aguardando dados...</pre>
                     </div>
                 </div>
                 <div class="card">
