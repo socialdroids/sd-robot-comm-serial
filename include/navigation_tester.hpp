@@ -13,7 +13,7 @@
 class NavigationTester
 {
 public:
-    NavigationTester();
+    NavigationTester(rclcpp::Node::SharedPtr _parent);
     ~NavigationTester();
 
     void recordPoses(bool _status);

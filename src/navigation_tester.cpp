@@ -1,11 +1,13 @@
 #include "navigation_tester.hpp"
+#include <rclcpp/logging.hpp>
 #include <string>
 
-NavigationTester::NavigationTester() : server_timeout_(100)
+NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent)
+    : server_timeout_(100)
 {
     record_poses_ = false;
     running_ = false;
-    node_ = std::make_shared<rclcpp::Node>("nav_tester");
+    node_ = _parent;
     acummulated_poses_.clear();
 
     waypoint_follower_action_client_ =
@@ -80,6 +82,8 @@ NavigationTester::NavigationTester() : server_timeout_(100)
                 //   navigation_feedback_indicator_->setText(getNavToPoseFeedbackLabel());
                 // }
             });
+
+    RCLCPP_INFO(node_->get_logger(), "Navigation Tester Init!");
 }
 
 NavigationTester::~NavigationTester()

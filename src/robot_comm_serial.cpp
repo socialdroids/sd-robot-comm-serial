@@ -201,8 +201,6 @@ RobotSerial::RobotSerial()
     ws_interface_->register_command_callback(
         std::bind(&RobotSerial::handle_gui_command, this, _1, _2));
     ws_interface_->run();
-
-    nav_tester_ = std::make_unique<NavigationTester>();
 }
 
 RobotSerial::~RobotSerial()
@@ -1094,11 +1092,21 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     else if (type == "record_poses")
     {
         bool enabled = data.at("enabled");
+        if (!nav_tester_)
+        {
+            nav_tester_ = std::make_unique<NavigationTester>(shared_from_this());
+        }
+
         nav_tester_->recordPoses(enabled);
         RCLCPP_INFO(this->get_logger(), "Record Poses: %d", enabled);
     }
     else if (type == "test_nav")
     {
+        if (!nav_tester_)
+        {
+            nav_tester_ = std::make_unique<NavigationTester>(shared_from_this());
+        }
+
         std::string button = data.at("button");
         if (button == "start")
         {
@@ -1140,6 +1148,11 @@ void RobotSerial::update_ecu_info(
 
 void RobotSerial::update_nav_info()
 {
+    if (!nav_tester_)
+    {
+        nav_tester_ = std::make_unique<NavigationTester>(shared_from_this());
+    }
+
     json info;
     json pose;
 
@@ -1353,6 +1366,7 @@ int main(int argc, char* argv[])
     rclcpp::init(argc, argv);
 
     auto robot_serial_node = std::make_shared<RobotSerial>();
+    // auto nav_tester_ = std::make_unique<NavigationTester>(robot_serial_node);
     rclcpp::spin(robot_serial_node);
 
     // FeedbackMessage message;
