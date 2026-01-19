@@ -26,6 +26,14 @@ public:
     std::string status() const;
 
     void add_goal(geometry_msgs::msg::PoseStamped& _goal);
+    geometry_msgs::msg::PoseStamped last_goal();
+
+    int remaining_poses();
+    float eta();
+    float remaining_distance();
+    int total_time();
+    int recoveries();
+    std::string navigation_status();
 
 private:
     using WaypointFollowerGoalHandle =
@@ -33,6 +41,15 @@ private:
 
     bool record_poses_;
     bool running_;
+
+    geometry_msgs::msg::Pose last_pose_;
+    int rem_poses_;
+    float eta_;
+    float rem_distance_;
+    int total_time_;
+    int recoveries_;
+    std::string nav_status_;
+
     // Timeout value when waiting for action servers to respnd
     std::chrono::milliseconds server_timeout_;
 

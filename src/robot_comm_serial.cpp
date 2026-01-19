@@ -1163,14 +1163,14 @@ void RobotSerial::update_nav_info()
     info["type"] = "nav_info";
     info["info"] = {{"status", nav_tester_->status()},
                     {"last_pose", pose},
-                    {"navigation_status", "ativo"},
+                    {"navigation_status", nav_tester_->navigation_status()},
                     {"localization_status", "ativo"},
                     {"nav_feedback", "ativo"},
-                    {"rem_poses", 0},
-                    {"eta", 0.0},
-                    {"rem_distance", 0.0},
-                    {"total_time", 0.0},
-                    {"recoveries", 0}};
+                    {"rem_poses", nav_tester_->remaining_poses()},
+                    {"eta", nav_tester_->eta()},
+                    {"rem_distance", nav_tester_->remaining_distance()},
+                    {"total_time", nav_tester_->total_time()},
+                    {"recoveries", nav_tester_->recoveries()}};
     ws_interface_->send_robot_status(info); // Reutiliza o método de envio
 }
 

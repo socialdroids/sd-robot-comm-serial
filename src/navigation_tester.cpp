@@ -21,22 +21,23 @@ NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent)
         "navigate_to_pose/_action/feedback", rclcpp::SystemDefaultsQoS(),
         [this](const nav2_msgs::action::NavigateToPose::Impl::FeedbackMessage::
                    SharedPtr msg) {
+            eta_ = rclcpp::Duration(msg->feedback.estimated_time_remaining)
+                       .seconds();
+            rem_distance_ = msg->feedback.distance_remaining;
+            total_time_ =
+                rclcpp::Duration(msg->feedback.navigation_time).seconds();
+            recoveries_ = msg->feedback.number_of_recoveries;
             // navigation_feedback_indicator_->setText(getNavToPoseFeedbackLabel(msg->feedback));
-            std::string aux = std::string(
-                "ETA: " +
-                std::to_string(
-                    rclcpp::Duration(msg->feedback.estimated_time_remaining)
-                        .seconds()) +
-                " s"
-                "Distance remaining: " +
-                std::to_string(msg->feedback.distance_remaining) +
-                " m"
-                "Time taken: " +
-                std::to_string(
-                    rclcpp::Duration(msg->feedback.navigation_time).seconds()) +
-                " s"
-                "Recoveries: " +
-                std::to_string(msg->feedback.number_of_recoveries) + "");
+            std::string aux = std::string("ETA: " + std::to_string(eta_) +
+                                          " s"
+                                          "Distance remaining: " +
+                                          std::to_string(rem_distance_) +
+                                          " m"
+                                          "Time taken: " +
+                                          std::to_string(total_time_) +
+                                          " s"
+                                          "Recoveries: " +
+                                          std::to_string(recoveries_) + "");
             RCLCPP_INFO(node_->get_logger(), "[GOAL FEEDBACK] %s", aux.c_str());
         });
 
@@ -45,36 +46,34 @@ NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent)
         node_->create_subscription<action_msgs::msg::GoalStatusArray>(
             "navigate_to_pose/_action/status", rclcpp::SystemDefaultsQoS(),
             [this](const action_msgs::msg::GoalStatusArray::SharedPtr msg) {
-                std::string status_str;
-
                 switch (msg->status_list.back().status)
                 {
                 case action_msgs::msg::GoalStatus::STATUS_EXECUTING:
-                    status_str = "active";
+                    nav_status_ = "active";
                     break;
 
                 case action_msgs::msg::GoalStatus::STATUS_SUCCEEDED:
-                    status_str = "reached";
+                    nav_status_ = "reached";
                     break;
 
                 case action_msgs::msg::GoalStatus::STATUS_CANCELED:
-                    status_str = "canceled";
+                    nav_status_ = "canceled";
                     break;
 
                 case action_msgs::msg::GoalStatus::STATUS_ABORTED:
-                    status_str = "aborted";
+                    nav_status_ = "aborted";
                     break;
 
                 case action_msgs::msg::GoalStatus::STATUS_UNKNOWN:
-                    status_str = "unknown";
+                    nav_status_ = "unknown";
                     break;
 
                 default:
-                    status_str = "inactive";
+                    nav_status_ = "inactive";
                     break;
                 }
                 RCLCPP_INFO(node_->get_logger(), "[GOAL STATUS] %s",
-                            std::string("Feedback: " + status_str).c_str());
+                            std::string("Feedback: " + nav_status_).c_str());
                 // navigation_goal_status_indicator_->setText(
                 //   getGoalStatusLabel(msg->status_list.back().status));
                 // if (msg->status_list.back().status !=
@@ -215,4 +214,42 @@ std::string NavigationTester::status() const
         return std::string("Ativo");
     }
     return std::string("Desativado");
+}
+
+void NavigationTester::add_goal(geometry_msgs::msg::PoseStamped& _goal)
+{
+}
+
+geometry_msgs::msg::PoseStamped NavigationTester::last_goal()
+{
+}
+
+int NavigationTester::remaining_poses()
+{
+    return rem_poses_;
+}
+
+float NavigationTester::eta()
+{
+    return eta_;
+}
+
+float NavigationTester::remaining_distance()
+{
+    return rem_distance_;
+}
+
+int NavigationTester::total_time()
+{
+    return total_time_;
+}
+
+int NavigationTester::recoveries()
+{
+    return recoveries_;
+}
+
+std::string NavigationTester::navigation_status()
+{
+    return nav_status_;
 }
