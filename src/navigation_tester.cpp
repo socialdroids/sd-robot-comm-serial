@@ -342,16 +342,17 @@ bool NavigationTester::read_waypoints_file()
     {
         json waypoints;
         json_file >> waypoints;
-        RCLCPP_INFO(node_->get_logger(), "JSON WAYPOINTS: %s", waypoints.dump().c_str());
+        RCLCPP_INFO(node_->get_logger(), "JSON WAYPOINTS: %s",
+                    waypoints.dump().c_str());
 
-        if (waypoints.is_array())
+        if (waypoints["waypoints"].is_array())
         {
             auto pose = geometry_msgs::msg::PoseStamped();
             tf2::Quaternion q;
             acummulated_poses_.clear();
 
-            for (json::iterator it = waypoints.begin(); it != waypoints.end();
-                 ++it)
+            for (json::iterator it = waypoints["waypoints"].begin();
+                 it != waypoints["waypoints"].end(); ++it)
             {
                 pose.pose.position.x = (*it)["x"];
                 pose.pose.position.y = (*it)["y"];
@@ -360,7 +361,12 @@ bool NavigationTester::read_waypoints_file()
                 pose.pose.orientation.z = (*it)["q_z"];
                 pose.pose.orientation.w = (*it)["q_w"];
             }
+            RCLCPP_INFO(node_->get_logger(), "Poses OK!");
             return true;
+        }
+        else
+        {
+            RCLCPP_ERROR(node_->get_logger(), "Invalid JSON");
         }
     }
     return false;
