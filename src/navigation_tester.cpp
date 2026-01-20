@@ -360,6 +360,7 @@ bool NavigationTester::read_waypoints_file()
                 pose.pose.orientation.y = (*it)["q_y"];
                 pose.pose.orientation.z = (*it)["q_z"];
                 pose.pose.orientation.w = (*it)["q_w"];
+                acummulated_poses_.push_back(pose);
             }
             RCLCPP_INFO(node_->get_logger(), "Poses OK!");
             return true;
