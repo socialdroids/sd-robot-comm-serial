@@ -310,17 +310,18 @@ void RobotSerial::reconnect_callback()
 
 void RobotSerial::command_callback()
 {
-    if (!connected_)
-    {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "Serial port disconnected!");
-        return;
-    }
     if (!nav_tester_)
     {
         nav_tester_ =
             std::make_unique<NavigationTester>(shared_from_this(),
                                                ament_index_cpp::get_package_share_directory("robot_comm_serial"));
+    }
+
+    if (!connected_)
+    {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Serial port disconnected!");
+        return;
     }
 
     // Não está recebendo comando de nenhum lugar, garante que o robô está
@@ -810,7 +811,10 @@ void RobotSerial::publish_base_params()
                         msg.build_data.tag, msg.build_data.build_date,
                         msg.wheel_distance, msg.wheel_diameter);
 
-        update_nav_info();
+        if (nav_tester_)
+        {
+            update_nav_info();
+        }
     }
 
     base_params_pub_->publish(msg);
