@@ -621,13 +621,22 @@ void RobotSerial::publish_imu()
     msg.linear_acceleration.y = last_message_.imu().acc().y() / 1000.f;
     msg.linear_acceleration.z = last_message_.imu().acc().z() / 1000.f;
     std::fill(msg.linear_acceleration_covariance.begin(),
-              msg.linear_acceleration_covariance.end(), 1e-2);
+              msg.linear_acceleration_covariance.end(), 0.0);
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
+    msg.linear_acceleration_covariance[0] = 1e-2;
+    msg.linear_acceleration_covariance[4] = 1e-2;
+    msg.linear_acceleration_covariance[8] = 1e-2;
 
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
     std::fill(msg.angular_velocity_covariance.begin(),
-              msg.angular_velocity_covariance.end(), 1e-3);
+              msg.angular_velocity_covariance.end(), 0.0);
+    msg.angular_velocity_covariance[0] = 1e-3;
+    msg.angular_velocity_covariance[4] = 1e-3;
+    msg.angular_velocity_covariance[8] = 1e-3;
 
     tf2::Quaternion q;
     q.setRPY(last_message_.imu().angle().roll(),
@@ -638,7 +647,10 @@ void RobotSerial::publish_imu()
     msg.orientation.z = q.z();
     msg.orientation.w = q.w();
     std::fill(msg.orientation_covariance.begin(),
-              msg.orientation_covariance.end(), 1e-3);
+              msg.orientation_covariance.end(), 0.0);
+    msg.orientation_covariance[0] = 1e-3;
+    msg.orientation_covariance[4] = 1e-3;
+    msg.orientation_covariance[8] = 1e-3;
 
     // RCLCPP_INFO_THROTTLE(
     //     this->get_logger(), *this->get_clock(), 100,
@@ -668,7 +680,17 @@ void RobotSerial::publish_odometry()
     msg.pose.pose.orientation = tf2::toMsg(q);
     // msg.pose.covariance = last_message_.pose().covariance();
 
-    std::fill(msg.pose.covariance.begin(), msg.pose.covariance.end(), 1e-3);
+    std::fill(msg.pose.covariance.begin(), msg.pose.covariance.end(), 0.0);
+    //  0  1  2  3  4  5
+    //  6  7  8  9 10 11
+    // 12 13 14 15 16 17
+    // 18 19 20 21 22 23
+    // 24 25 26 27 28 29
+    // 30 31 32 33 34 35
+    msg.pose.covariance[0] = 1e-3;
+    msg.pose.covariance[7] = 1e-3;
+    msg.pose.covariance[35] = 1e-3;
+
     // const auto& pose_cov_proto = last_message_.pose().covariance();
     // if (pose_cov_proto.size() == 36)
     // {
@@ -681,7 +703,10 @@ void RobotSerial::publish_odometry()
     msg.twist.twist.angular.z =
         last_message_.velocities().angular_trad_s() / 1000.0;
 
-    std::fill(msg.twist.covariance.begin(), msg.twist.covariance.end(), 1e-3);
+    std::fill(msg.twist.covariance.begin(), msg.twist.covariance.end(), 0.0);
+    msg.twist.covariance[0] = 1e-3;
+    msg.twist.covariance[7] = 1e-3;
+    msg.twist.covariance[35] = 1e-3;
     // const auto& twist_cov_proto = last_message_.velocities().covariance();
     // if (twist_cov_proto.size() == 36)
     // {
