@@ -4,6 +4,7 @@
 #include "nav2_msgs/action/follow_waypoints.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include <chrono>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
@@ -39,6 +40,14 @@ private:
     using WaypointFollowerGoalHandle =
         rclcpp_action::ClientGoalHandle<nav2_msgs::action::FollowWaypoints>;
 
+    void navigate_feedback_callback(const nav2_msgs::action::NavigateToPose::
+                                        Impl::FeedbackMessage::SharedPtr msg);
+    void navigate_status_callback(
+        const action_msgs::msg::GoalStatusArray::SharedPtr msg);
+
+    void waypoints_callback(
+        const visualization_msgs::msg::MarkerArray::SharedPtr msg);
+
     bool record_poses_;
     bool running_;
 
@@ -65,6 +74,8 @@ private:
     WaypointFollowerGoalHandle::SharedPtr waypoint_follower_goal_handle_;
 
     // Navigation action feedback subscribers
+    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr
+        waypoints_sub_;
     rclcpp::Subscription<
         nav2_msgs::action::NavigateToPose::Impl::FeedbackMessage>::SharedPtr
         navigation_feedback_sub_;

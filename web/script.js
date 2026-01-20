@@ -406,6 +406,9 @@ Data do Build:    ${info.build_date || 'N/A'}`;
         info.last_pose.yaw = info.last_pose.yaw.toFixed(3);
 
         let last_pose = `(${info.last_pose.x} ; ${info.last_pose.y} @ ${info.last_pose.yaw})`
+
+        info.eta = info.eta.toFixed(2);
+        info.rem_distance = info.rem_distance.toFixed(2);
         
         navInfoDiv.textContent = `Status:   ${info.status || 'Desativado'}
 Última Pose:        ${last_pose    || '(x;y @ yaw)'}

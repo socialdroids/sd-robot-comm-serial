@@ -1163,9 +1163,9 @@ void RobotSerial::update_nav_info()
     info["type"] = "nav_info";
     info["info"] = {{"status", nav_tester_->status()},
                     {"last_pose", pose},
-                    {"navigation_status", nav_tester_->navigation_status()},
+                    {"navigation_status", "ativo"},
                     {"localization_status", "ativo"},
-                    {"nav_feedback", "ativo"},
+                    {"nav_feedback", nav_tester_->navigation_status()},
                     {"rem_poses", nav_tester_->remaining_poses()},
                     {"eta", nav_tester_->eta()},
                     {"rem_distance", nav_tester_->remaining_distance()},

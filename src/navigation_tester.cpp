@@ -10,6 +10,13 @@ NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent)
     node_ = _parent;
     acummulated_poses_.clear();
 
+    rem_poses_ = 0;
+    eta_ = 0;
+    rem_distance_ = 0;
+    total_time_ = 0;
+    recoveries_ = 0;
+    nav_status_ = "";
+
     waypoint_follower_action_client_ =
         rclcpp_action::create_client<nav2_msgs::action::FollowWaypoints>(
             node_, "follow_waypoints");
@@ -19,68 +26,21 @@ NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent)
     navigation_feedback_sub_ = node_->create_subscription<
         nav2_msgs::action::NavigateToPose::Impl::FeedbackMessage>(
         "navigate_to_pose/_action/feedback", rclcpp::SystemDefaultsQoS(),
-        [this](const nav2_msgs::action::NavigateToPose::Impl::FeedbackMessage::
-                   SharedPtr msg) {
-            eta_ = rclcpp::Duration(msg->feedback.estimated_time_remaining)
-                       .seconds();
-            rem_distance_ = msg->feedback.distance_remaining;
-            total_time_ =
-                rclcpp::Duration(msg->feedback.navigation_time).seconds();
-            recoveries_ = msg->feedback.number_of_recoveries;
-            // navigation_feedback_indicator_->setText(getNavToPoseFeedbackLabel(msg->feedback));
-            std::string aux = std::string("ETA: " + std::to_string(eta_) +
-                                          " s"
-                                          "Distance remaining: " +
-                                          std::to_string(rem_distance_) +
-                                          " m"
-                                          "Time taken: " +
-                                          std::to_string(total_time_) +
-                                          " s"
-                                          "Recoveries: " +
-                                          std::to_string(recoveries_) + "");
-            RCLCPP_INFO(node_->get_logger(), "[GOAL FEEDBACK] %s", aux.c_str());
-        });
+        std::bind(&NavigationTester::navigate_feedback_callback, this,
+                  std::placeholders::_1));
 
     // create action goal status subscribers
     navigation_goal_status_sub_ =
         node_->create_subscription<action_msgs::msg::GoalStatusArray>(
             "navigate_to_pose/_action/status", rclcpp::SystemDefaultsQoS(),
-            [this](const action_msgs::msg::GoalStatusArray::SharedPtr msg) {
-                switch (msg->status_list.back().status)
-                {
-                case action_msgs::msg::GoalStatus::STATUS_EXECUTING:
-                    nav_status_ = "active";
-                    break;
+            std::bind(&NavigationTester::navigate_status_callback, this,
+                      std::placeholders::_1));
 
-                case action_msgs::msg::GoalStatus::STATUS_SUCCEEDED:
-                    nav_status_ = "reached";
-                    break;
-
-                case action_msgs::msg::GoalStatus::STATUS_CANCELED:
-                    nav_status_ = "canceled";
-                    break;
-
-                case action_msgs::msg::GoalStatus::STATUS_ABORTED:
-                    nav_status_ = "aborted";
-                    break;
-
-                case action_msgs::msg::GoalStatus::STATUS_UNKNOWN:
-                    nav_status_ = "unknown";
-                    break;
-
-                default:
-                    nav_status_ = "inactive";
-                    break;
-                }
-                RCLCPP_INFO(node_->get_logger(), "[GOAL STATUS] %s",
-                            std::string("Feedback: " + nav_status_).c_str());
-                // navigation_goal_status_indicator_->setText(
-                //   getGoalStatusLabel(msg->status_list.back().status));
-                // if (msg->status_list.back().status !=
-                // action_msgs::msg::GoalStatus::STATUS_EXECUTING) {
-                //   navigation_feedback_indicator_->setText(getNavToPoseFeedbackLabel());
-                // }
-            });
+    waypoints_sub_ =
+        node_->create_subscription<visualization_msgs::msg::MarkerArray>(
+            "waypoints", rclcpp::QoS(1).transient_local(),
+            std::bind(&NavigationTester::waypoints_callback, this,
+                      std::placeholders::_1));
 
     RCLCPP_INFO(node_->get_logger(), "Navigation Tester Init!");
 }
@@ -106,6 +66,13 @@ void NavigationTester::start()
         RCLCPP_ERROR(node_->get_logger(),
                      "follow_waypoints action server is not available."
                      " Is the initial pose set?");
+        return;
+    }
+
+    if (acummulated_poses_.empty())
+    {
+        RCLCPP_ERROR(node_->get_logger(),
+                     "Nenhuma pose definida para o trajeto!");
         return;
     }
 
@@ -252,4 +219,94 @@ int NavigationTester::recoveries()
 std::string NavigationTester::navigation_status()
 {
     return nav_status_;
+}
+
+void NavigationTester::navigate_feedback_callback(
+    const nav2_msgs::action::NavigateToPose::Impl::FeedbackMessage::SharedPtr
+        msg)
+{
+    eta_ = rclcpp::Duration(msg->feedback.estimated_time_remaining).seconds();
+    rem_distance_ = msg->feedback.distance_remaining;
+    total_time_ = rclcpp::Duration(msg->feedback.navigation_time).seconds();
+    recoveries_ = msg->feedback.number_of_recoveries;
+    // navigation_feedback_indicator_->setText(getNavToPoseFeedbackLabel(msg->feedback));
+    std::string aux = std::string("ETA: " + std::to_string(eta_) +
+                                  " s"
+                                  "Distance remaining: " +
+                                  std::to_string(rem_distance_) +
+                                  " m"
+                                  "Time taken: " +
+                                  std::to_string(total_time_) +
+                                  " s"
+                                  "Recoveries: " +
+                                  std::to_string(recoveries_) + "");
+    RCLCPP_DEBUG(node_->get_logger(), "[GOAL FEEDBACK] %s", aux.c_str());
+}
+
+void NavigationTester::navigate_status_callback(
+    const action_msgs::msg::GoalStatusArray::SharedPtr msg)
+{
+    switch (msg->status_list.back().status)
+    {
+    case action_msgs::msg::GoalStatus::STATUS_EXECUTING:
+        nav_status_ = "Ativo";
+        break;
+
+    case action_msgs::msg::GoalStatus::STATUS_SUCCEEDED:
+        nav_status_ = "Chegou";
+        break;
+
+    case action_msgs::msg::GoalStatus::STATUS_CANCELED:
+        nav_status_ = "Cancelado";
+        break;
+
+    case action_msgs::msg::GoalStatus::STATUS_ABORTED:
+        nav_status_ = "Abortado";
+        break;
+
+    case action_msgs::msg::GoalStatus::STATUS_UNKNOWN:
+        nav_status_ = "Desconhecido";
+        break;
+
+    default:
+        nav_status_ = "Inativo";
+        break;
+    }
+    RCLCPP_DEBUG(node_->get_logger(), "[GOAL STATUS] %s",
+                 std::string("Feedback: " + nav_status_).c_str());
+    // navigation_goal_status_indicator_->setText(
+    //   getGoalStatusLabel(msg->status_list.back().status));
+    // if (msg->status_list.back().status !=
+    // action_msgs::msg::GoalStatus::STATUS_EXECUTING) {
+    //   navigation_feedback_indicator_->setText(getNavToPoseFeedbackLabel());
+    // }
+}
+
+void NavigationTester::waypoints_callback(
+    const visualization_msgs::msg::MarkerArray::SharedPtr msg)
+{
+
+    auto pose = geometry_msgs::msg::PoseStamped();
+    tf2::Quaternion q;
+    acummulated_poses_.clear();
+
+    for (const auto& marker : msg->markers)
+    {
+        if (marker.type == visualization_msgs::msg::Marker::SPHERE)
+        {
+            pose.header = marker.header;
+            pose.pose = marker.pose;
+            tf2::fromMsg(pose.pose.orientation, q);
+            double r{}, p{}, yaw{};
+            tf2::Matrix3x3 m(q);
+            m.getRPY(r, p, yaw);
+
+            acummulated_poses_.push_back(pose);
+
+            RCLCPP_INFO(node_->get_logger(),
+                        "Added Pose %ld (%.2f; %.2f; %.2f)",
+                        acummulated_poses_.size(), pose.pose.position.x,
+                        pose.pose.position.y, yaw);
+        }
+    }
 }
