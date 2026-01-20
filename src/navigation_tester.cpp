@@ -58,7 +58,7 @@ void NavigationTester::recordPoses(bool _status)
 
 void NavigationTester::start()
 {
-    if (acummulated_poses_.empty() && !read_waypoints_file())
+    if (!read_waypoints_file() && acummulated_poses_.empty())
     {
         RCLCPP_ERROR(node_->get_logger(),
                      "Nenhuma pose definida para o trajeto!");
