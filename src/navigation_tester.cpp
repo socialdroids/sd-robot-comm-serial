@@ -321,6 +321,7 @@ void NavigationTester::waypoints_callback(
             json_point["q_y"] = pose.pose.orientation.y;
             json_point["q_z"] = pose.pose.orientation.z;
             json_point["q_w"] = pose.pose.orientation.w;
+            json_point["frame"] = pose.header.frame;
 
             waypoints["waypoints"].push_back(json_point);
 
@@ -360,6 +361,8 @@ bool NavigationTester::read_waypoints_file()
                 pose.pose.orientation.y = (*it)["q_y"];
                 pose.pose.orientation.z = (*it)["q_z"];
                 pose.pose.orientation.w = (*it)["q_w"];
+                pose.header.stamp = rclcpp::Clock().now();
+                pose.header.frame = (*it)["frame"];
                 acummulated_poses_.push_back(pose);
             }
             RCLCPP_INFO(node_->get_logger(), "Poses OK!");
