@@ -625,9 +625,9 @@ void RobotSerial::publish_imu()
     // 0 1 2
     // 3 4 5
     // 6 7 8
-    msg.linear_acceleration_covariance[0] = 1e-2;
-    msg.linear_acceleration_covariance[4] = 1e-2;
-    msg.linear_acceleration_covariance[8] = 1e-2;
+    msg.linear_acceleration_covariance[0] = 1.0;
+    msg.linear_acceleration_covariance[4] = 1.0;
+    msg.linear_acceleration_covariance[8] = 1.0;
 
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
@@ -704,8 +704,8 @@ void RobotSerial::publish_odometry()
         last_message_.velocities().angular_trad_s() / 1000.0;
 
     std::fill(msg.twist.covariance.begin(), msg.twist.covariance.end(), 0.0);
-    msg.twist.covariance[0] = 1e-3;
-    msg.twist.covariance[7] = 1e-3;
+    msg.twist.covariance[0] = 1e-4;
+    msg.twist.covariance[7] = 1e-4;
     msg.twist.covariance[35] = 1e-3;
     // const auto& twist_cov_proto = last_message_.velocities().covariance();
     // if (twist_cov_proto.size() == 36)
