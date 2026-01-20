@@ -312,9 +312,9 @@ void RobotSerial::command_callback()
 {
     if (!nav_tester_)
     {
-        nav_tester_ =
-            std::make_unique<NavigationTester>(shared_from_this(),
-                                               ament_index_cpp::get_package_share_directory("robot_comm_serial"));
+        nav_tester_ = std::make_unique<NavigationTester>(
+            shared_from_this(),
+            ament_index_cpp::get_package_share_directory("robot_comm_serial"));
     }
 
     if (!connected_)
@@ -620,10 +620,14 @@ void RobotSerial::publish_imu()
     msg.linear_acceleration.x = last_message_.imu().acc().x() / 1000.f;
     msg.linear_acceleration.y = last_message_.imu().acc().y() / 1000.f;
     msg.linear_acceleration.z = last_message_.imu().acc().z() / 1000.f;
+    std::fill(msg.linear_acceleration_covariance.begin(),
+              msg.linear_acceleration_covariance.end(), 1e-2);
 
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
+    std::fill(msg.angular_velocity_covariance.begin(),
+              msg.angular_velocity_covariance.end(), 1e-3);
 
     tf2::Quaternion q;
     q.setRPY(last_message_.imu().angle().roll(),
@@ -633,6 +637,8 @@ void RobotSerial::publish_imu()
     msg.orientation.y = q.y();
     msg.orientation.z = q.z();
     msg.orientation.w = q.w();
+    std::fill(msg.orientation_covariance.begin(),
+              msg.orientation_covariance.end(), 1e-3);
 
     // RCLCPP_INFO_THROTTLE(
     //     this->get_logger(), *this->get_clock(), 100,
@@ -662,24 +668,26 @@ void RobotSerial::publish_odometry()
     msg.pose.pose.orientation = tf2::toMsg(q);
     // msg.pose.covariance = last_message_.pose().covariance();
 
-    const auto& pose_cov_proto = last_message_.pose().covariance();
-    if (pose_cov_proto.size() == 36)
-    {
-        std::copy(pose_cov_proto.begin(), pose_cov_proto.end(),
-                  msg.pose.covariance.begin());
-    }
+    std::fill(msg.pose.covariance.begin(), msg.pose.covariance.end(), 1e-3);
+    // const auto& pose_cov_proto = last_message_.pose().covariance();
+    // if (pose_cov_proto.size() == 36)
+    // {
+    //     std::copy(pose_cov_proto.begin(), pose_cov_proto.end(),
+    //               msg.pose.covariance.begin());
+    // }
 
     msg.twist.twist.linear.x =
         last_message_.velocities().linear_mm_s() / 1000.0;
     msg.twist.twist.angular.z =
         last_message_.velocities().angular_trad_s() / 1000.0;
-    // msg.twist.covariance = last_message_.velocities().covariance();
-    const auto& twist_cov_proto = last_message_.velocities().covariance();
-    if (twist_cov_proto.size() == 36)
-    {
-        std::copy(twist_cov_proto.begin(), twist_cov_proto.end(),
-                  msg.twist.covariance.begin());
-    }
+
+    std::fill(msg.twist.covariance.begin(), msg.twist.covariance.end(), 1e-3);
+    // const auto& twist_cov_proto = last_message_.velocities().covariance();
+    // if (twist_cov_proto.size() == 36)
+    // {
+    //     std::copy(twist_cov_proto.begin(), twist_cov_proto.end(),
+    //               msg.twist.covariance.begin());
+    // }
     odometry_pub_->publish(msg);
 }
 
