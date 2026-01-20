@@ -20,7 +20,6 @@
 #include "std_msgs/msg/int32_multi_array.hpp"
 
 #include "websocket_interface.hpp"
-
 #include "navigation_tester.hpp"
 
 #include "cobs.h"
@@ -143,6 +142,9 @@ private:
     unsigned long baud_;
     std::string port_;
     bool connected_;
+
+    size_t MAX_RTOS_TASKS;
+
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
     void packet_callback();

@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const JOYSTICK_SEND_INTERVAL = 100; // Envia comandos 10x por segundo
     const JOYSTICK_MAX_LINEAR = 0.5; // m/s
     const JOYSTICK_MAX_ANGULAR = 1.0; // rad/s
+    const STACK_WARNING_THRESHOLD = 512; // bytes
 
     // --- Elementos da UI ---
     const statusDiv = document.getElementById("connection-status");
@@ -135,6 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 break;
             case "nav_info":
                 updateNavInfo(data.info);
+                break;
+            case "rtos_tasks":
+                updateRTOSCard(data.info);
                 break;
             case "current_configs":
                 updateConfigForms(data.configs);
@@ -382,6 +386,53 @@ document.addEventListener("DOMContentLoaded", () => {
             el.style.backgroundColor = '';
             el.style.color = '';
         }
+    }
+
+    function updateRTOSCard(json) {
+      const container = document.getElementById("tasks-container");
+      const title = document.getElementById("rtos-title");
+
+      container.innerHTML = "";
+
+      if (!json || json.length === 0) {
+        title.textContent = "RTOS Tasks (0)";
+        container.innerHTML = "<em>Nenhuma task ativa</em>";
+        return;
+      }
+
+      title.textContent = `RTOS Tasks (${json.length})`;
+
+      json.forEach(task => {
+        const taskDiv = document.createElement("div");
+        taskDiv.className = "task";
+
+        const warning =
+          task.stack_free < STACK_WARNING_THRESHOLD ? "warning" : "";
+
+        const cpu = Math.min(task.cpu ?? 0, 100).toFixed(2);
+        const state = (task.state || "INVALID").toUpperCase();
+
+        taskDiv.innerHTML = `
+      <div class="task-header">
+        <span class="task-name">${task.name}</span>
+
+        <div class="task-right">
+          <span class="task-cpu">${cpu}%</span>
+          <span class="task-status status-${state}">${state}</span>
+        </div>
+      </div>
+
+      <div class="cpu-bar">
+        <div class="cpu-fill" style="width: ${cpu}%;"></div>
+      </div>
+
+      <div class="stack-info ${warning}">
+        Stack livre: <strong>${task.stack_free} bytes</strong>
+      </div>
+    `;
+
+        container.appendChild(taskDiv);
+      });
     }
 
     function updateEcuInfo(info) {

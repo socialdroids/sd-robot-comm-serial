@@ -195,9 +195,6 @@ void WebsocketInterface::broadcast(const std::string& message)
 
 void WebsocketInterface::send_robot_status(const json& robot_data)
 {
-    // O tipo já deve estar no objeto json, mas podemos garantir
-    // (Melhor prática é quem chama 'send_robot_status' já montar o JSON
-    // completo) Ex: jsonData["type"] = "robot_status";
     broadcast(robot_data.dump());
 }
 

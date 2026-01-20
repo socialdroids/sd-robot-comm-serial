@@ -95,6 +95,8 @@ RobotSerial::RobotSerial()
         yaml_get_value<double>(config, "fake_charging_radius");
     fake_charging_fail_count_ = 0;
 
+    MAX_RTOS_TASKS = yaml_get_value<unsigned long>(config, "max_rtos_tasks");
+
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
     RCLCPP_INFO(this->get_logger(), "Baud Rate: %ld", baud_);
@@ -105,6 +107,7 @@ RobotSerial::RobotSerial()
     RCLCPP_INFO(this->get_logger(), "Command Update Frequency: %d Hz",
                 command_freq);
     RCLCPP_INFO(this->get_logger(), "Use Fake Charging: %d", fake_charging_);
+    RCLCPP_INFO(this->get_logger(), "Max RTOS Tasks: %ld", MAX_RTOS_TASKS);
 
     // === TÓPICOS
     // Create a QoS profile for best effort reliability
@@ -312,6 +315,12 @@ void RobotSerial::command_callback()
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                              "Serial port disconnected!");
         return;
+    }
+    if (!nav_tester_)
+    {
+        nav_tester_ =
+            std::make_unique<NavigationTester>(shared_from_this(),
+                                               ament_index_cpp::get_package_share_directory("robot_comm_serial"));
     }
 
     // Não está recebendo comando de nenhum lugar, garante que o robô está
@@ -888,27 +897,59 @@ void RobotSerial::publish_rtos_info()
                  "State", "Usage(%)", "StackFree");
         data = aux;
 
+        struct Task_t
+        {
+            std::string name;
+            float cpu;
+            int stack;
+            std::string state;
+        };
+        Task_t task;
+        std::vector<Task_t> tasks;
+
         for (size_t n = 0;
              n < last_message_.info().rtos_tasks().task_info_size(); n++)
         {
-            snprintf(
-                aux, sizeof(aux), "%2d) %-18s:%-10s %3.2f%%  %4i\n",
-                last_message_.info().rtos_tasks().task_info(n).id(),
-                last_message_.info().rtos_tasks().task_info(n).name().c_str(),
-                state[last_message_.info().rtos_tasks().task_info(n).state()],
-                last_message_.info().rtos_tasks().task_info(n).usage(),
-                last_message_.info()
-                    .rtos_tasks()
-                    .task_info(n)
-                    .stack_free()); // The minimum amount of stack space that
-                                    // has remained for the task since the task
-                                    // was created.  The closer this value is to
-                                    // zero the closer the task has come to
-                                    // overflowing its stack.
+            task.name = last_message_.info().rtos_tasks().task_info(n).name();
+            task.cpu = last_message_.info().rtos_tasks().task_info(n).usage();
+            task.stack =
+                last_message_.info().rtos_tasks().task_info(n).stack_free();
+            task.state = std::string(
+                state[last_message_.info().rtos_tasks().task_info(n).state()]);
+
+            snprintf(aux, sizeof(aux), "%2d) %-18s:%-10s %3.2f%%  %4i\n",
+                     last_message_.info().rtos_tasks().task_info(n).id(),
+                     task.name.c_str(), task.state.c_str(), task.cpu,
+                     task.stack); // The minimum amount of stack space that
+                                  // has remained for the task since the task
+                                  // was created.  The closer this value is to
+                                  // zero the closer the task has come to
+                                  // overflowing its stack.
+
+            tasks.push_back(task);
+
             data += aux;
         }
-        RCLCPP_INFO(this->get_logger(), "%s", data.c_str());
+        std::sort(
+            tasks.begin(), tasks.end(),
+            [](const Task_t& a, const Task_t& b) { return a.cpu > b.cpu; });
+
+        json rtos_tasks, json_task;
+        rtos_tasks["type"] = "rtos_tasks";
+        rtos_tasks["info"] = json::array();
+        for (size_t n = 0; n < MAX_RTOS_TASKS; n++)
+        {
+            json_task["name"] = tasks.at(n).name.c_str();
+            json_task["cpu"] = tasks.at(n).cpu;
+            json_task["stack_free"] = tasks.at(n).stack;
+            json_task["state"] = tasks.at(n).state.c_str();
+
+            rtos_tasks["info"].push_back(json_task);
+        }
+
+        RCLCPP_DEBUG(this->get_logger(), "%s", data.c_str());
         last_message_.mutable_info()->clear_rtos_tasks();
+        ws_interface_->send_robot_status(rtos_tasks);
     }
 }
 
@@ -1092,21 +1133,12 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     else if (type == "record_poses")
     {
         bool enabled = data.at("enabled");
-        if (!nav_tester_)
-        {
-            nav_tester_ = std::make_unique<NavigationTester>(shared_from_this());
-        }
 
         nav_tester_->recordPoses(enabled);
         RCLCPP_INFO(this->get_logger(), "Record Poses: %d", enabled);
     }
     else if (type == "test_nav")
     {
-        if (!nav_tester_)
-        {
-            nav_tester_ = std::make_unique<NavigationTester>(shared_from_this());
-        }
-
         std::string button = data.at("button");
         if (button == "start")
         {
@@ -1118,7 +1150,8 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
         }
         else
         {
-            RCLCPP_ERROR(this->get_logger(), "Valor desconhecido para test_nav!");
+            RCLCPP_ERROR(this->get_logger(),
+                         "Valor desconhecido para test_nav!");
         }
         RCLCPP_INFO(this->get_logger(), "Test Navigation: %s", button.c_str());
     }
@@ -1148,11 +1181,6 @@ void RobotSerial::update_ecu_info(
 
 void RobotSerial::update_nav_info()
 {
-    if (!nav_tester_)
-    {
-        nav_tester_ = std::make_unique<NavigationTester>(shared_from_this());
-    }
-
     json info;
     json pose;
 
@@ -1366,7 +1394,6 @@ int main(int argc, char* argv[])
     rclcpp::init(argc, argv);
 
     auto robot_serial_node = std::make_shared<RobotSerial>();
-    // auto nav_tester_ = std::make_unique<NavigationTester>(robot_serial_node);
     rclcpp::spin(robot_serial_node);
 
     // FeedbackMessage message;

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <header>
         <h1>Painel de Controle do Robô</h1>
@@ -28,7 +30,7 @@
         <!-- ABA DE MONITORAMENTO -->
         <div id="tab-monitoramento" class="tab-content active">
             <div class="monitor-grid">
-                
+
                 <!-- Gráfico de Velocidade -->
                 <div class="card chart-card-large">
                     <h2>Velocidades</h2>
@@ -39,7 +41,8 @@
                         <label><input type="checkbox" data-dataset="vel_linear_fusion" checked> Fusão Linear</label>
                         <label><input type="checkbox" data-dataset="vel_angular_fusion" checked> Fusão Angular</label>
                         <label><input type="checkbox" data-dataset="vel_linear_encoder" checked> Encoder Linear</label>
-                        <label><input type="checkbox" data-dataset="vel_angular_encoder" checked> Encoder Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_encoder" checked> Encoder
+                            Angular</label>
                         <label><input type="checkbox" data-dataset="vel_angular_imu" checked> IMU Angular</label>
                         <label><input type="checkbox" data-dataset="setpoint_linear" checked> Setpoint Linear</label>
                         <label><input type="checkbox" data-dataset="setpoint_angular" checked> Setpoint Angular</label>
@@ -118,7 +121,7 @@
                     <div class="status-indicators">
                         <div class="indicator" id="status-estop">E-STOP</div>
                         <div class="indicator" id="status-charging">CARREGANDO</div>
-                        
+
                         <div class="bumper-container">
                             <h4>Bumpers</h4>
                             <div class="bumper-grid">
@@ -128,6 +131,12 @@
                                 <div class="indicator bumper" id="bumper-br">B-R</div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 id="rtos-title">RTOS Tasks</h2>
+                    <div id="tasks-container">
                     </div>
                 </div>
 
@@ -146,7 +155,7 @@
 
         <!-- ABA DE CONFIGURAÇÃO -->
         <div id="tab-configuracao" class="tab-content">
-            
+
             <div id="config-forms-grid">
                 <!-- PIDs -->
                 <div class="card">
@@ -245,11 +254,12 @@
                     </form>
                     <hr>
                     <h2><span class="emoji">🔄</span> Modos</h2>
-                        <form id="open-loop-form" class="open-loop-container">
-                            <label for="open-loop-check">Modo Malha Aberta</label> <label class="toggle-switch"> <input type="checkbox" id="open-loop-check">
-                                <span class="slider"></span>
-                            </label>
-                        </form>
+                    <form id="open-loop-form" class="open-loop-container">
+                        <label for="open-loop-check">Modo Malha Aberta</label> <label class="toggle-switch"> <input
+                                type="checkbox" id="open-loop-check">
+                            <span class="slider"></span>
+                        </label>
+                    </form>
                 </div>
 
                 <!-- Kalman -->
@@ -310,4 +320,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>

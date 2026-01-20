@@ -2,12 +2,14 @@
 #include <rclcpp/logging.hpp>
 #include <string>
 
-NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent)
+NavigationTester::NavigationTester(rclcpp::Node::SharedPtr _parent,
+                                   std::string _share_dir)
     : server_timeout_(100)
 {
     record_poses_ = false;
     running_ = false;
     node_ = _parent;
+    share_dir_ = _share_dir;
     acummulated_poses_.clear();
 
     rem_poses_ = 0;
@@ -56,6 +58,12 @@ void NavigationTester::recordPoses(bool _status)
 
 void NavigationTester::start()
 {
+    if (acummulated_poses_.empty() && !read_waypoints_file())
+    {
+        RCLCPP_ERROR(node_->get_logger(),
+                     "Nenhuma pose definida para o trajeto!");
+        return;
+    }
     running_ = true;
 
     auto is_action_server_ready =
@@ -66,13 +74,6 @@ void NavigationTester::start()
         RCLCPP_ERROR(node_->get_logger(),
                      "follow_waypoints action server is not available."
                      " Is the initial pose set?");
-        return;
-    }
-
-    if (acummulated_poses_.empty())
-    {
-        RCLCPP_ERROR(node_->get_logger(),
-                     "Nenhuma pose definida para o trajeto!");
         return;
     }
 
@@ -221,6 +222,11 @@ std::string NavigationTester::navigation_status()
     return nav_status_;
 }
 
+std::string NavigationTester::get_filename()
+{
+    return share_dir_ + "/config/nav_waypoints.json";
+}
+
 void NavigationTester::navigate_feedback_callback(
     const nav2_msgs::action::NavigateToPose::Impl::FeedbackMessage::SharedPtr
         msg)
@@ -285,10 +291,15 @@ void NavigationTester::navigate_status_callback(
 void NavigationTester::waypoints_callback(
     const visualization_msgs::msg::MarkerArray::SharedPtr msg)
 {
+    if (!is_recording())
+        return;
 
     auto pose = geometry_msgs::msg::PoseStamped();
     tf2::Quaternion q;
     acummulated_poses_.clear();
+
+    json waypoints, json_point;
+    waypoints["waypoints"] = json::array();
 
     for (const auto& marker : msg->markers)
     {
@@ -296,12 +307,22 @@ void NavigationTester::waypoints_callback(
         {
             pose.header = marker.header;
             pose.pose = marker.pose;
+            acummulated_poses_.push_back(pose);
+
             tf2::fromMsg(pose.pose.orientation, q);
             double r{}, p{}, yaw{};
             tf2::Matrix3x3 m(q);
             m.getRPY(r, p, yaw);
 
-            acummulated_poses_.push_back(pose);
+            json_point["x"] = pose.pose.position.x;
+            json_point["y"] = pose.pose.position.y;
+            json_point["yaw"] = yaw;
+            json_point["q_x"] = pose.pose.orientation.x;
+            json_point["q_y"] = pose.pose.orientation.y;
+            json_point["q_z"] = pose.pose.orientation.z;
+            json_point["q_w"] = pose.pose.orientation.w;
+
+            waypoints["waypoints"].push_back(json_point);
 
             RCLCPP_INFO(node_->get_logger(),
                         "Added Pose %ld (%.2f; %.2f; %.2f)",
@@ -309,4 +330,38 @@ void NavigationTester::waypoints_callback(
                         pose.pose.position.y, yaw);
         }
     }
+    std::ofstream json_file(get_filename());
+    json_file << waypoints << std::endl;
+}
+
+bool NavigationTester::read_waypoints_file()
+{
+    std::ifstream json_file(get_filename());
+
+    if (json_file.good()) // File exists
+    {
+        json waypoints;
+        json_file >> waypoints;
+        RCLCPP_INFO(node_->get_logger(), "JSON WAYPOINTS: %s", waypoints.dump().c_str());
+
+        if (waypoints.is_array())
+        {
+            auto pose = geometry_msgs::msg::PoseStamped();
+            tf2::Quaternion q;
+            acummulated_poses_.clear();
+
+            for (json::iterator it = waypoints.begin(); it != waypoints.end();
+                 ++it)
+            {
+                pose.pose.position.x = (*it)["x"];
+                pose.pose.position.y = (*it)["y"];
+                pose.pose.orientation.x = (*it)["q_x"];
+                pose.pose.orientation.y = (*it)["q_y"];
+                pose.pose.orientation.z = (*it)["q_z"];
+                pose.pose.orientation.w = (*it)["q_w"];
+            }
+            return true;
+        }
+    }
+    return false;
 }

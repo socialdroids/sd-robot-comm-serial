@@ -8,13 +8,17 @@
 #include <chrono>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+
+using json = nlohmann::json;
 
 class NavigationTester
 {
 public:
-    NavigationTester(rclcpp::Node::SharedPtr _parent);
+    NavigationTester(rclcpp::Node::SharedPtr _parent, std::string _share_dir);
     ~NavigationTester();
 
     void recordPoses(bool _status);
@@ -35,6 +39,7 @@ public:
     int total_time();
     int recoveries();
     std::string navigation_status();
+    std::string get_filename();
 
 private:
     using WaypointFollowerGoalHandle =
@@ -48,6 +53,9 @@ private:
     void waypoints_callback(
         const visualization_msgs::msg::MarkerArray::SharedPtr msg);
 
+    bool read_waypoints_file();
+
+    std::string share_dir_;
     bool record_poses_;
     bool running_;
 
