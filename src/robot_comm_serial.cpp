@@ -748,7 +748,7 @@ void RobotSerial::publish_encoders()
 
     // Encoder - left
     data.velocity = last_message_.velocities().left_wheel_mm_s() / 1000.0;
-    data.count = last_message_.encoder().left();
+    data.count = last_message_.encoder().left_count();
     if (last_message_.encoder().has_left_status())
     {
         last_message_.encoder().left_status().magnitude();
@@ -763,7 +763,7 @@ void RobotSerial::publish_encoders()
 
     // Encoder - right
     data.velocity = last_message_.velocities().right_wheel_mm_s() / 1000.0;
-    data.count = last_message_.encoder().right();
+    data.count = last_message_.encoder().right_count();
     if (last_message_.encoder().has_right_status())
     {
         last_message_.encoder().right_status().magnitude();
@@ -1374,8 +1374,8 @@ void RobotSerial::publish_full_status()
                       {"y", last_message_.pose().y_mm() / 1000.0},
                       {"theta", last_message_.pose().yaw_trad() / 1000.0}};
 
-    status["encoders"] = {{"left_pulses", last_message_.encoder().left()},
-                          {"right_pulses", last_message_.encoder().right()}};
+    status["encoders"] = {{"left_pulses", last_message_.encoder().left_pos()},
+                          {"right_pulses", last_message_.encoder().right_pos()}};
     status["gauges"] = {
         {"battery_level", last_message_.power_status().battery_percent()},
         {"motor_current",

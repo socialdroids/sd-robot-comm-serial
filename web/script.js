@@ -318,8 +318,9 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // Atualiza os labels de contagem de pulsos
         if (data.encoders) {
-            document.getElementById('encoder-val-left').textContent = data.encoders.left_pulses;
-            document.getElementById('encoder-val-right').textContent = data.encoders.right_pulses;
+            document.getElementById('encoder-val-left').textContent = data.encoders.left_pulses.toFixed(2);
+            ;
+            document.getElementById('encoder-val-right').textContent = data.encoders.right_pulses.toFixed(2);
         }
     }
 

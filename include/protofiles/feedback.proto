@@ -65,12 +65,14 @@ message IMU
 
 message Encoder
 {
-  sint64 left = 1;
-  sint64 right = 2;
-  optional EncoderStatus left_status = 3;
-  optional EncoderStatus right_status = 4;
-  Pose pose_enc = 5;
-  Velocities twist_enc = 6;
+  sint64 left_count = 1;
+  sint64 right_count = 2;
+  float left_pos = 3;
+  float right_pos = 4;
+  optional EncoderStatus left_status = 5;
+  optional EncoderStatus right_status = 6;
+  Pose pose_enc = 7;
+  Velocities twist_enc = 8;
 
 }
 
