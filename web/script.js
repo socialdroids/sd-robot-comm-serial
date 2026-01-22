@@ -439,8 +439,11 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateEcuInfo(info) {
         info.wheel_distance = info.wheel_distance.toFixed(3);
         info.wheel_diameter = info.wheel_diameter.toFixed(3);
+        info.pkt_frequency = info.pkt_frequency.toFixed(1);
         
-        ecuInfoDiv.textContent = `Nome do Robô:   ${info.robot_name || 'N/A'}
+        ecuInfoDiv.textContent = `ECU:   ${info.ecu_connected ? 'Conectada' : 'Desconectada'}
+Taxa de Atualização:   ${info.pkt_frequency || 'N/A'} Hz
+Nome do Robô:   ${info.robot_name || 'N/A'}
 Versão ECU:       ${info.ecu_version || 'N/A'}
 Versão Driver:    ${info.driver_version || 'N/A'}
 Versão Motor:     ${info.motor_version || 'N/A'}

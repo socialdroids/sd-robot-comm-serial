@@ -287,7 +287,7 @@ void RobotSerial::packet_callback()
 
     auto t_end = high_resolution_clock::now();
 
-    RCLCPP_INFO_THROTTLE(
+    RCLCPP_DEBUG_THROTTLE(
         this->get_logger(), *this->get_clock(), 2000,
         "Feedback Rate: %.2f Hz | Processing Time = %.3f (%.2f, %.2f, %.2f) us",
         packet_frequency(),
@@ -321,6 +321,7 @@ void RobotSerial::command_callback()
     {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                              "Serial port disconnected!");
+        update_ecu_info("", "", "", "", "", "", "", "", 0, 0);
         return;
     }
 
@@ -1212,7 +1213,9 @@ void RobotSerial::update_ecu_info(
                     {"git_hash", _git_hash},
                     {"git_branch", _git_branch},
                     {"git_tag", _git_tag},
-                    {"build_date", _build_date}};
+                    {"build_date", _build_date},
+                    {"pkt_frequency", packet_frequency()},
+                    {"ecu_connected", connected_}};
     ws_interface_->send_robot_status(info); // Reutiliza o método de envio
 }
 
@@ -1374,8 +1377,9 @@ void RobotSerial::publish_full_status()
                       {"y", last_message_.pose().y_mm() / 1000.0},
                       {"theta", last_message_.pose().yaw_trad() / 1000.0}};
 
-    status["encoders"] = {{"left_pulses", last_message_.encoder().left_pos()},
-                          {"right_pulses", last_message_.encoder().right_pos()}};
+    status["encoders"] = {
+        {"left_pulses", last_message_.encoder().left_pos()},
+        {"right_pulses", last_message_.encoder().right_pos()}};
     status["gauges"] = {
         {"battery_level", last_message_.power_status().battery_percent()},
         {"motor_current",
