@@ -46,7 +46,7 @@ install(TARGETS ${PROJECT_NAME}
 
 ## Install headers
 install(FILES ${CMAKE_SOURCE_DIR}/include/serial/serial.h ${CMAKE_SOURCE_DIR}/include/serial/v8stdint.h
-    DESTINATION ${CMAKE_SOURCE_DIR}/include/serial
+    DESTINATION include/serial
 )
 
 ## Tests

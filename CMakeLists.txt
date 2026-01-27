@@ -181,7 +181,7 @@ install(TARGETS ${PROJECT_NAME} proto_lib
 
 # Install include files
 install(DIRECTORY include/
-  DESTINATION include/
+  DESTINATION include/${PROJECT_NAME}
 )
 
 # Install YAML Config files, Web files
