@@ -379,6 +379,13 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateIndicator(el, isActive, activeClass, text = null) {
         if (!el) return;
         if (text) el.textContent = text;
+
+        if (el.classList.length > 3 && activeClass !== 'orange')
+        {
+            el.classList.value = '';
+            el.classList.add("indicator");
+        }
+
         isActive ? el.classList.add("active", activeClass) : el.classList.remove("active", activeClass);
         if (activeClass === 'grey') {
             el.style.backgroundColor = '#888';
