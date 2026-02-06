@@ -1384,8 +1384,6 @@ void RobotSerial::publish_full_status()
         {"battery_level", last_message_.power_status().battery_percent()},
         {"motor_current",
          last_message_.power_status().driver_current_ma() / 1000.f},
-        {"charging_status",
-         last_message_.power_status().charging() ? "idle" : "discharging"},
         {"charging_current",
          last_message_.power_status().charging_current_ma() / 1000.f},
         {"temp_imu", last_message_.imu().temperature()},
@@ -1402,6 +1400,8 @@ void RobotSerial::publish_full_status()
     }
     status["status_flags"] = {
         {"estop", last_message_.emergency_button_pressed()},
+        {"charging_status",
+         last_message_.power_status().charging() ? "charging" : "discharging"},
         {"bumpers", {{"fl", bpFL}, {"fr", bpFR}, {"bl", bpBL}, {"br", bpBR}}}};
 
     ws_interface_->send_robot_status(status);
