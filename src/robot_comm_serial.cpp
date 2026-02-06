@@ -21,7 +21,7 @@ void finishedCallback(int _ch)
         Mix_FreeChunk(sound);
     }
     finished = true;
-    std::cerr << "Music finished!\n";
+    // std::cerr << "Music finished!\n";
     // Mix_CloseAudio();
 }
 
@@ -30,16 +30,16 @@ int setupAudio()
     // Initialize SDL
     if (SDL_Init(SDL_INIT_AUDIO) < 0)
     {
-        std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
-                  << std::endl;
+        // std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
+        //           << std::endl;
         return 1;
     }
 
     // Initialize SDL_mixer
     if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
     {
-        std::cerr << "SDL_mixer could not initialize! SDL_mixer Error: "
-                  << Mix_GetError() << std::endl;
+        // std::cerr << "SDL_mixer could not initialize! SDL_mixer Error: "
+        //           << Mix_GetError() << std::endl;
         // SDL_Quit();
         return 1;
     }
@@ -47,7 +47,7 @@ int setupAudio()
 
 int playSound(std::string _path)
 {
-    std::cout << "Play " << _path << std::endl;
+    // std::cout << "Play " << _path << std::endl;
     // Load WAV file
     sound = Mix_LoadWAV(_path.c_str());
     if (sound == nullptr)
@@ -944,9 +944,10 @@ void RobotSerial::publish_rtos_info()
         };
         Task_t task;
         std::vector<Task_t> tasks;
+        size_t ecu_task_size =
+            last_message_.info().rtos_tasks().task_info_size();
 
-        for (size_t n = 0;
-             n < last_message_.info().rtos_tasks().task_info_size(); n++)
+        for (size_t n = 0; n < ecu_task_size; n++)
         {
             task.name = last_message_.info().rtos_tasks().task_info(n).name();
             task.cpu = last_message_.info().rtos_tasks().task_info(n).usage();
@@ -975,7 +976,7 @@ void RobotSerial::publish_rtos_info()
         json rtos_tasks, json_task;
         rtos_tasks["type"] = "rtos_tasks";
         rtos_tasks["info"] = json::array();
-        for (size_t n = 0; n < MAX_RTOS_TASKS; n++)
+        for (size_t n = 0; n < std::min(MAX_RTOS_TASKS, ecu_task_size); n++)
         {
             json_task["name"] = tasks.at(n).name.c_str();
             json_task["cpu"] = tasks.at(n).cpu;
