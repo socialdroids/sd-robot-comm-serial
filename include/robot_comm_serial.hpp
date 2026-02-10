@@ -8,16 +8,19 @@
 #include <serial/serial.h>
 #include <string.h>
 
+#include "builtin_interfaces/msg/time.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include "builtin_interfaces/msg/time.hpp"
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
-#include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/battery_state.hpp"
-#include "std_msgs/msg/int32_multi_array.hpp"
+#include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/int32_multi_array.hpp"
+
+#include "websocket_interface.hpp"
+#include "navigation_tester.hpp"
 
 #include "cobs.h"
 #include "command.pb.h"
@@ -27,9 +30,9 @@
 #include <yaml-cpp/yaml.h>
 
 // Para ler a pose do robô
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include <geometry_msgs/msg/transform_stamped.hpp>
 
 // ROS messages
 #include "sd_msgs/msg/base_params.hpp"
@@ -107,6 +110,10 @@ private:
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
     rclcpp::TimerBase::SharedPtr command_timer_;
+    rclcpp::TimerBase::SharedPtr gui_update_timer_;
+
+    std::unique_ptr<WebsocketInterface> ws_interface_;
+    std::unique_ptr<NavigationTester> nav_tester_;
 
     size_t packet_size_;
     uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
@@ -118,8 +125,11 @@ private:
     static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
     std::deque<float> packet_frequency_;
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
+    std::chrono::time_point<high_resolution_clock> last_cmd_vel_time_;
+    std::chrono::time_point<high_resolution_clock> last_virtual_cmd_time_;
 
     FeedbackMessage last_message_;
+    RobotParameters last_params_;
     CommandMessage last_command_;
     bool last_message_ok_;
 
@@ -132,6 +142,9 @@ private:
     unsigned long baud_;
     std::string port_;
     bool connected_;
+
+    size_t MAX_RTOS_TASKS;
+
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
     void packet_callback();
@@ -159,6 +172,8 @@ private:
     void publish_debug();
     void publish_base_params();
     void publish_battery();
+    void publish_robot_config();
+    void publish_rtos_info();
 
     /**
      * @brief Determina o estado de carregamento fake baseado na distância para
@@ -168,6 +183,32 @@ private:
      * charging estiver desabilitado
      */
     bool fake_charging_status();
+
+    /**
+     * @brief Lida com os comandos da Web gUI
+     *
+     * @param type Tipo de comando
+     * @param data Dados
+     */
+    void handle_gui_command(const std::string& type, const json& data);
+    void update_ecu_info(
+        const std::string& _name, const std::string& _driver_version,
+        const std::string& _ecu_version, const std::string& _motor_version,
+        const std::string& _git_hash, const std::string& _git_branch,
+        const std::string& _git_tag, const std::string& _build_date,
+        float _wheel_distance, float _wheel_diameter);
+    void update_nav_info();
+    void update_config_info();
+    void publish_full_status();
+
+    template <typename TimeResolution>
+    std::chrono::high_resolution_clock::duration::rep timeSince(
+        std::chrono::time_point<high_resolution_clock>& _start)
+    {
+        return duration_cast<TimeResolution>(high_resolution_clock::now() -
+                                             _start)
+            .count();
+    }
 
     template <typename Func> void try_serial_operation(Func&& func)
     {

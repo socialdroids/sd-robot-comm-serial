@@ -32,9 +32,15 @@
 
   <depend>geometry_msgs</depend>
   <depend>nav2_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>sd_msgs</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
+  <depend>nlohmann_json</depend>
+  <depend>visualization_msgs</depend>
+  <depend>backward_ros</depend>
+  <depend>libsdl2-dev</depend>
+  <depend>libsdl2-mixer-dev</depend>
 
   <export>
   <build_type>ament_cmake</build_type>

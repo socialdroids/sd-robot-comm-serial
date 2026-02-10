@@ -8,5 +8,8 @@ reconnection_frequency: 1 # [Hz]
 command_frequency: 100 # [Hz]
 
 # Custom function
-fake_charging: True
+fake_charging: False
 fake_charging_radius: 0.5 # [m]
+
+# Quantidade máxima de tasks para exibir na GUI
+max_rtos_tasks: 10

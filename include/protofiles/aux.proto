@@ -1,11 +1,26 @@
 syntax = "proto3";
 import "nanopb.proto";
 
+enum RobotState
+{
+  ROBOT_STATE_UNSPECIFIED = 0;
+  ROBOT_STATE_MANUAL = 1;
+  ROBOT_STATE_AUTO = 2;
+  ROBOT_STATE_STAND_BY = 3;
+}
+
 message Array3D
 {
   sint32 x = 1;
   sint32 y = 2;
   sint32 z = 3;
+}
+
+message Angle
+{
+  float roll = 1;
+  float pitch = 2;
+  float yaw = 3;
 }
 
 message PowerStatus
@@ -53,7 +68,7 @@ message BuildInfo
 
 message RobotHardware
 {
-  string robot_name = 1 [(nanopb).max_size = 10];
+  string robot_name = 1 [(nanopb).max_size = 15];
   string ecu_version = 2 [(nanopb).max_size = 10];
   string driver_version = 3 [(nanopb).max_size = 10];
   string motor_version = 4 [(nanopb).max_size = 10];

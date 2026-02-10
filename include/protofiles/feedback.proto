@@ -7,6 +7,7 @@ message PIDConfig
   float k_p = 1;
   float k_i = 2;
   float k_d = 3;
+  bool enabled = 4;
 }
 
 message RobotParameters
@@ -57,17 +58,21 @@ message IMU
 {
   Array3D acc = 1;
   Array3D gyro = 2;
-  int32 temperature = 3;
+  float temperature = 3;
+  Angle angle = 4;
+  sint64 timestamp = 5;
 }
 
 message Encoder
 {
-  sint64 left = 1;
-  sint64 right = 2;
-  optional EncoderStatus left_status = 3;
-  optional EncoderStatus right_status = 4;
-  Pose pose_enc = 5;
-  Velocities twist_enc = 6;
+  sint64 left_count = 1;
+  sint64 right_count = 2;
+  float left_pos = 3;
+  float right_pos = 4;
+  optional EncoderStatus left_status = 5;
+  optional EncoderStatus right_status = 6;
+  Pose pose_enc = 7;
+  Velocities twist_enc = 8;
 
 }
 
@@ -82,6 +87,21 @@ message EncoderStatus
   int32 ppr = 7;
 }
 
+message RTOSTaskData
+{
+  string name = 1 [(nanopb).max_size = 20];
+  int32 id = 2;
+  int32 state = 3;
+  float usage = 4;
+  int32 stack_free = 5;
+  float update_rate = 6;
+}
+
+message RTOSData
+{
+  repeated RTOSTaskData task_info = 1 [(nanopb).max_count = 20];
+}
+
 message RobotInfo
 {
   RobotHardware hardware_info = 1;
@@ -90,6 +110,7 @@ message RobotInfo
   optional string debug_data = 4 [(nanopb).max_size = 500];
   optional BuildInfo build_data = 5;
   optional BuildInfo power_build_data = 6;
+  RTOSData rtos_tasks = 7;
 }
 
 message FeedbackMessage

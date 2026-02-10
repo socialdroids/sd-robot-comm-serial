@@ -14,6 +14,7 @@ endif()
 
 include(FetchContent)
 
+# --- YAML CPP
 FetchContent_Declare(
   yaml-cpp
   GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
@@ -21,28 +22,60 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(yaml-cpp)
 
+# --- 
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
+# --- Websocket++
+# === boost ===
+find_package(Boost REQUIRED COMPONENTS filesystem system thread regex)
+
+FetchContent_Declare(websocketpp
+GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+  GIT_TAG 0.8.2)
+FetchContent_GetProperties(websocketpp)
+if(NOT websocketpp_POPULATED)
+  FetchContent_Populate(websocketpp)
+  add_subdirectory(${websocketpp_SOURCE_DIR} ${websocketpp_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+# add interface library with all websocketpp dependencies
+add_library(Websockets INTERFACE)
+target_include_directories(Websockets INTERFACE ${websocketpp_SOURCE_DIR})
+target_link_libraries(Websockets INTERFACE Boost::system Boost::thread Boost::regex)
+# ----------------------------------------------------------------------------
+
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
 find_package(geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(backward_ros REQUIRED)
 
 find_package(sd_msgs REQUIRED)
 
+find_package(SDL2 REQUIRED)
+
 include_directories(include)
+include_directories(${SDL2_INCLUDE_DIRS})
 
 # Define a list of dependencies
 set(DEPENDENCIES
   rclcpp
   geometry_msgs
   pluginlib
+  nav2_msgs
   nav_msgs
+  visualization_msgs 
+  sensor_msgs
   Protobuf
   sd_msgs
   tf2
@@ -83,13 +116,21 @@ target_link_libraries(proto_lib ${Protobuf_LIBRARIES})
 
 message("Protofiles OK!")
 
+
+# Audio
+include(FindPkgConfig)
+pkg_check_modules(SDL2_Mixer REQUIRED IMPORTED_TARGET SDL2_mixer)
+find_package(SDL2 REQUIRED)
+include_directories(${SDL2_INCLUDE_DIRS})
+# Audio
+
 add_subdirectory(cmake/serial)
 
 # add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
-add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/cobs.c)
+add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c src/navigation_tester.cpp)
 
-target_link_libraries(${PROJECT_NAME} proto_lib ${Protobuf_LIBRARIES} serial 
-    yaml-cpp::yaml-cpp)
+target_link_libraries(${PROJECT_NAME} Websockets proto_lib ${Protobuf_LIBRARIES} serial 
+    yaml-cpp::yaml-cpp nlohmann_json::nlohmann_json SDL2::SDL2 PkgConfig::SDL2_Mixer)
 
 ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 
@@ -140,12 +181,12 @@ install(TARGETS ${PROJECT_NAME} proto_lib
 
 # Install include files
 install(DIRECTORY include/
-  DESTINATION include/
+  DESTINATION include/${PROJECT_NAME}
 )
 
-# Install YAML Config files
+# Install YAML Config files, Web files
 install(DIRECTORY
-  config
+  config web
   DESTINATION share/${PROJECT_NAME}
 )
 

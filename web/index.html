@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle do Robô</title>
+    <!-- Carrega a biblioteca de gráficos Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Carrega a biblioteca de gauges (gauge.js) -->
+    <script src="https://bernii.github.io/gauge.js/dist/gauge.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header>
+        <h1>Painel de Controle do Robô</h1>
+        <div id="connection-status" class="status-disconnected">DESCONECTADO</div>
+    </header>
+
+    <!-- Navegação das Abas -->
+    <nav class="tabs">
+        <button class="tab-button active" data-tab="tab-monitoramento">Monitoramento</button>
+        <button class="tab-button" data-tab="tab-configuracao">Configuração</button>
+        <button class="tab-button" data-tab="tab-comandos">Comandos</button>
+    </nav>
+
+    <main>
+        <!-- ABA DE MONITORAMENTO -->
+        <div id="tab-monitoramento" class="tab-content active">
+            <div class="monitor-grid">
+
+                <!-- Gráfico de Velocidade -->
+                <div class="card chart-card-large">
+                    <h2>Velocidades</h2>
+                    <div class="chart-container">
+                        <canvas id="velChart"></canvas>
+                    </div>
+                    <div class="chart-toggles" id="vel-toggles">
+                        <label><input type="checkbox" data-dataset="vel_linear_fusion" checked> Fusão Linear</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_fusion" checked> Fusão Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_linear_encoder" checked> Encoder Linear</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_encoder" checked> Encoder
+                            Angular</label>
+                        <label><input type="checkbox" data-dataset="vel_angular_imu" checked> IMU Angular</label>
+                        <label><input type="checkbox" data-dataset="setpoint_linear" checked> Setpoint Linear</label>
+                        <label><input type="checkbox" data-dataset="setpoint_angular" checked> Setpoint Angular</label>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Aceleração -->
+                <div class="card chart-card">
+                    <h2>Aceleração IMU</h2>
+                    <div class="chart-container">
+                        <canvas id="accelChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Encoders -->
+                <div class="card chart-card">
+                    <h2>Velocidade dos Encoders</h2>
+                    <div class="chart-container">
+                        <canvas id="encoderChart"></canvas>
+                    </div>
+                    <div class="chart-values">
+                        <span>Pulsos Esq: <span id="encoder-val-left">0</span></span>
+                        <span>Pulsos Dir: <span id="encoder-val-right">0</span></span>
+                    </div>
+                </div>
+
+                <!-- Pose do Robô -->
+                <div class="card">
+                    <h2>Pose do Robô</h2>
+                    <div class="chart-container" style="aspect-ratio: 1/1;">
+                        <canvas id="poseCanvas"></canvas>
+                    </div>
+                    <div class="pose-values">
+                        <span>X: <span id="pose-val-x">0.000</span> m</span>
+                        <span>Y: <span id="pose-val-y">0.000</span> m</span>
+                        <span>&Theta;: <span id="pose-val-theta">0.000</span> rad</span>
+                    </div>
+                </div>
+
+                <!-- Gauges -->
+                <div class="card gauge-container">
+                    <h2>Indicadores</h2>
+                    <div class="gauge-grid">
+                        <div>
+                            <canvas id="gauge-battery"></canvas>
+                            <div class="gauge-label">Bateria (%)</div>
+                            <div class="gauge-value" id="gauge-val-battery">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-motor"></canvas>
+                            <div class="gauge-label">Corrente Driver (A)</div>
+                            <div class="gauge-value" id="gauge-val-motor">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-charge-current"></canvas>
+                            <div class="gauge-label">Corrente Carga (A)</div>
+                            <div class="gauge-value" id="gauge-val-charge-current">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-temp-imu"></canvas>
+                            <div class="gauge-label">Temp. IMU (⁰C)</div>
+                            <div class="gauge-value" id="gauge-val-temp-imu">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-temp-ecu"></canvas>
+                            <div class="gauge-label">Temp. ECU (°C)</div>
+                            <div class="gauge-value" id="gauge-val-temp-ecu">0.0</div>
+                        </div>
+                        <div>
+                            <canvas id="gauge-temp-mcu"></canvas>
+                            <div class="gauge-label">Temp. MCU (°C)</div>
+                            <div class="gauge-value" id="gauge-val-temp-mcu">0.0</div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="status-indicators">
+                        <div class="indicator" id="status-estop">E-STOP</div>
+                        <div class="indicator" id="status-charging">CARREGANDO</div>
+
+                        <div class="bumper-container">
+                            <h4>Bumpers</h4>
+                            <div class="bumper-grid">
+                                <div class="indicator bumper" id="bumper-fl">F-L</div>
+                                <div class="indicator bumper" id="bumper-fr">F-R</div>
+                                <div class="indicator bumper" id="bumper-bl">B-L</div>
+                                <div class="indicator bumper" id="bumper-br">B-R</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 id="rtos-title">RTOS Tasks</h2>
+                    <div id="tasks-container">
+                    </div>
+                </div>
+
+                <!-- Informações e Logs -->
+                <div class="card">
+                    <h2>Informações da ECU</h2>
+                    <pre id="ecu-info">Aguardando dados...</pre>
+                </div>
+                <div class="card">
+                    <h2>Logs da ECU</h2>
+                    <div id="log-messages"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ABA DE CONFIGURAÇÃO -->
+        <div id="tab-configuracao" class="tab-content">
+
+            <div id="config-forms-grid">
+                <!-- PIDs -->
+                <div class="card">
+                    <h2><span class="emoji">🔧</span> Controle PID</h2>
+                    <form id="pid-form">
+                        <fieldset>
+                            <legend>Velocidade Linear</legend>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-linear-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-linear-p">0.0</span>
+                                I: <span id="current-pid-linear-i">0.0</span>
+                                D: <span id="current-pid-linear-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-linear-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-linear-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-linear-d" step="0.0001" placeholder="D">
+                                <button type="submit" data-target="linear">Enviar</button>
+                            </div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Velocidade Angular</legend>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-angular-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-angular-p">0.0</span>
+                                I: <span id="current-pid-angular-i">0.0</span>
+                                D: <span id="current-pid-angular-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-angular-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-angular-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-angular-d" step="0.0001" placeholder="D">
+                                <button type="submit" data-target="angular">Enviar</button>
+                            </div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Roda Esquerda</legend>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-left-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-left-p">0.0</span>
+                                I: <span id="current-pid-left-i">0.0</span>
+                                D: <span id="current-pid-left-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-left-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-left-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-left-d" step="0.0001" placeholder="D">
+                                <button type="submit" data-target="left">Enviar</button>
+                            </div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Roda Direita</legend>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pid-right-enable" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <div class="pid-current-values">
+                                P: <span id="current-pid-right-p">0.0</span>
+                                I: <span id="current-pid-right-i">0.0</span>
+                                D: <span id="current-pid-right-d">0.0</span>
+                            </div>
+                            <div class="pid-inputs">
+                                <input type="number" id="pid-right-p" step="0.0001" placeholder="P">
+                                <input type="number" id="pid-right-i" step="0.0001" placeholder="I">
+                                <input type="number" id="pid-right-d" step="0.0001" placeholder="D">
+                                <button type="submit" data-target="right">Enviar</button>
+                            </div>
+                        </fieldset>
+                    </form>
+                </div>
+
+                <!-- Limites -->
+                <div class="card">
+                    <h2><span class="emoji">🚦</span> Limites</h2>
+                    <form id="limits-form">
+                        <fieldset>
+                            <legend>Linear</legend>
+                            <label>Vel. Máx (m/s): <input type="number" id="limit-linear-vel" step="0.01"></label>
+                            <label>Acel. Máx (m/s²): <input type="number" id="limit-linear-acc" step="0.01"></label>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Angular</legend>
+                            <label>Vel. Máx (rad/s): <input type="number" id="limit-angular-vel" step="0.01"></label>
+                            <label>Acel. Máx (rad/s²): <input type="number" id="limit-angular-acc" step="0.01"></label>
+                        </fieldset>
+                        <button type="submit">Enviar Limites</button>
+                    </form>
+                    <hr>
+                    <h2><span class="emoji">🔄</span> Modos</h2>
+                    <form id="open-loop-form" class="open-loop-container">
+                        <label for="open-loop-check">Modo Malha Aberta</label> <label class="toggle-switch"> <input
+                                type="checkbox" id="open-loop-check">
+                            <span class="slider"></span>
+                        </label>
+                    </form>
+                </div>
+
+                <!-- Kalman -->
+                <div class="card full-width">
+                    <h2><span class="emoji">🔬</span> Filtro de Kalman (Covariância)</h2>
+                    <form id="kalman-form">
+                        <h3>Matriz de Covariância do Modelo (Q) - 5x5</h3>
+                        <div class="matrix-grid" id="kalman-model-matrix" data-size="5">
+                            <!-- JS vai popular isso -->
+                        </div>
+                        <h3>Matriz de Covariância da Medição (R) - 4x4</h3>
+                        <div class="matrix-grid" id="kalman-measurement-matrix" data-size="4">
+                            <!-- JS vai popular isso -->
+                        </div>
+                        <button type="submit">Enviar Matrizes</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-comandos" class="tab-content">
+            <div class="command-grid">
+                <div class="card">
+                    <h2>Controle Manual (Joystick)</h2>
+                    <div id="joystick-container"></div>
+                    <div class="joystick-values">
+                        <span>Linear: <span id="joystick-val-linear">0.00</span> m/s</span>
+                        <span>Angular: <span id="joystick-val-angular">0.00</span> rad/s</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Navegação</h2>
+
+                    <form id="nav-poses-form" class="nav-poses-container">
+                        <div>
+                            <label for="record-poses-check">Gravar Poses</label>
+                            <p></p>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="record-poses-check">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <button class="start-button" type="submit" data-target="start">Iniciar</button>
+                        <button class="stop-button" type="submit" data-target="stop">Parar</button>
+                    </form>
+                    <div class="card">
+                        <h2>Informações da Navegação</h2>
+                        <pre id="nav-info">Aguardando dados...</pre>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Outros Comandos</h2>
+                    <p>(Espaço para botões de comando, ex: "Home", "Parar Serviço", etc.)</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
