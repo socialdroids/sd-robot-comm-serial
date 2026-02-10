@@ -608,7 +608,8 @@ void RobotSerial::publish_flags()
     sd_msgs::msg::RobotFlags msg;
     msg.emergency_button_status = last_message_.emergency_button_pressed();
     msg.colision_detected = last_message_.colision_detected();
-    msg.motion_detection = last_message_.motion_detection();
+    msg.motion_detection = last_message_.imu().linear_motion_detected();
+    // msg.motion_detection = last_message_.imu().angular_motion_detected();
     robot_flags_pub_->publish(msg);
 }
 
