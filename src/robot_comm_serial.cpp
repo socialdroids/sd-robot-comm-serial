@@ -30,7 +30,8 @@ int setupAudio()
     // Initialize SDL
     if (SDL_Init(SDL_INIT_AUDIO) < 0)
     {
-        // std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
+        // std::cerr << "SDL could not initialize! SDL Error: " <<
+        // SDL_GetError()
         //           << std::endl;
         return 1;
     }
@@ -118,6 +119,10 @@ RobotSerial::RobotSerial()
         "robot_base/flags", best_effort_qos);
     imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
                                                              best_effort_qos);
+    imu_temperature_pub_ =
+        this->create_publisher<sensor_msgs::msg::Temperature>(
+            "robot_base/imu_temperature", best_effort_qos);
+
     odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
         "robot_base/odometry", best_effort_qos);
     encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
@@ -616,6 +621,8 @@ void RobotSerial::publish_flags()
 void RobotSerial::publish_imu()
 {
     sensor_msgs::msg::Imu msg;
+    sensor_msgs::msg::Temperature temp_msg;
+
     msg.header.stamp = this->get_clock()->now();
     msg.header.frame_id = "imu";
 
@@ -654,6 +661,11 @@ void RobotSerial::publish_imu()
     msg.orientation_covariance[4] = 1e-3;
     msg.orientation_covariance[8] = 1e-3;
 
+    temp_msg.header.stamp = this->get_clock()->now();
+    temp_msg.header.frame_id = "imu";
+    temp_msg.temperature = last_message_.imu().temperature();
+    temp_msg.variance = 0;
+
     // RCLCPP_INFO_THROTTLE(
     //     this->get_logger(), *this->get_clock(), 100,
     //     "Robot Feedback IMU| aX: %d | aY: %d | vW: %d | T: %.2f | t: %ld",
@@ -663,6 +675,7 @@ void RobotSerial::publish_imu()
     //     last_message_.imu().temperature(),
     //     last_message_.imu().timestamp());
 
+    imu_temperature_pub_->publish(temp_msg);
     imu_pub_->publish(msg);
 }
 

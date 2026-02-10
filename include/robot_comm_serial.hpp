@@ -94,6 +94,7 @@ private:
 
     rclcpp::Publisher<sd_msgs::msg::RobotFlags>::SharedPtr robot_flags_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::Temperature>::SharedPtr imu_temperature_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
     rclcpp::Publisher<sd_msgs::msg::RobotEncoders>::SharedPtr encoder_pub_;
     rclcpp::Publisher<sd_msgs::msg::RobotBumpers>::SharedPtr bumpers_pub_;
