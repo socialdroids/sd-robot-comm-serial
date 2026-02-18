@@ -1,6 +1,6 @@
 # Serial port configuration
 serial_port: "/dev/robot_ecu"
-baud_rate: 1000000
+baud_rate: 2000000
 
 # Timer configuration
 reception_frequency: 500 # [Hz]

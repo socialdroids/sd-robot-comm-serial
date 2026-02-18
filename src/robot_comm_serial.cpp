@@ -11,7 +11,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 
-volatile bool finished = true;
+volatile bool finished = true, mute = false;
 Mix_Chunk* sound = nullptr;
 
 void finishedCallback(int _ch)
@@ -48,6 +48,10 @@ int setupAudio()
 
 int playSound(std::string _path)
 {
+    if (mute)
+    {
+        return 0;
+    }
     // std::cout << "Play " << _path << std::endl;
     // Load WAV file
     sound = Mix_LoadWAV(_path.c_str());
@@ -1207,6 +1211,11 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
                          "Valor desconhecido para test_nav!");
         }
         RCLCPP_INFO(this->get_logger(), "Test Navigation: %s", button.c_str());
+    }
+    else if (type == "mute_sounds")
+    {
+        mute = data.at("enabled");
+        RCLCPP_INFO(this->get_logger(), "Mute Sounds: %d", mute);
     }
 }
 
