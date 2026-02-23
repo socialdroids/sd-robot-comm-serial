@@ -17,7 +17,7 @@
 #include "sensor_msgs/msg/battery_state.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
-#include "std_msgs/msg/int32_multi_array.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 #include "websocket_interface.hpp"
 #include "navigation_tester.hpp"
@@ -104,6 +104,8 @@ private:
     rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
     rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
 
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr imu_dt_pub_;
+
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
 
@@ -130,6 +132,7 @@ private:
     std::chrono::time_point<high_resolution_clock> last_virtual_cmd_time_;
 
     FeedbackMessage last_message_;
+    rclcpp::Time last_message_timestamp_;
     RobotParameters last_params_;
     CommandMessage last_command_;
     bool last_message_ok_;

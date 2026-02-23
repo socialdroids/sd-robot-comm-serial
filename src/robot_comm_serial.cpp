@@ -11,7 +11,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 
-volatile bool finished = true, mute = false;
+volatile bool finished = true, mute = true;
 Mix_Chunk* sound = nullptr;
 
 void finishedCallback(int _ch)
@@ -123,6 +123,8 @@ RobotSerial::RobotSerial()
         "robot_base/flags", best_effort_qos);
     imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
                                                              best_effort_qos);
+    imu_dt_pub_ = this->create_publisher<std_msgs::msg::Float32>(
+        "robot_base/dt_imu", best_effort_qos);
     imu_temperature_pub_ =
         this->create_publisher<sensor_msgs::msg::Temperature>(
             "robot_base/imu_temperature", best_effort_qos);
@@ -432,6 +434,7 @@ void RobotSerial::connect()
 
 void RobotSerial::decode_buffer()
 {
+    rclcpp::Time decode_time = this->get_clock()->now();
     int end_byte_count = 0, packet_count = 0;
     size_t packet_start = 0, packet_sz = 0;
     std::vector<size_t> end_pos;
@@ -515,6 +518,14 @@ void RobotSerial::decode_buffer()
                                  message.DebugString().c_str());
 
                     last_message_ = message;
+                    last_message_timestamp_ = this->get_clock()->now();
+
+                    RCLCPP_INFO_THROTTLE(
+                        this->get_logger(), *this->get_clock(), 1000,
+                        "Decode: %.3f ms | Transfer: %.3f ms",
+                        (this->get_clock()->now() - decode_time).nanoseconds() /
+                            1e6,
+                        decode_result.out_len * 1000.f * 10.f / 2000000.f);
                     last_message_ok_ = true;
                 }
                 else
@@ -627,7 +638,31 @@ void RobotSerial::publish_imu()
     sensor_msgs::msg::Imu msg;
     sensor_msgs::msg::Temperature temp_msg;
 
-    msg.header.stamp = this->get_clock()->now();
+    static bool sync = true;
+    static unsigned long ecu_timestamp = 0;
+    static rclcpp::Time pc_timestamp = last_message_timestamp_;
+    // 2 -> proccess
+    // 4 -> transmission
+    const unsigned long total_delay = 2 + 4;
+    if (sync && last_message_.imu().timestamp() > 0)
+    {
+        sync = false;
+        ecu_timestamp = last_message_.imu().timestamp();
+        pc_timestamp = last_message_timestamp_;
+    }
+    const unsigned long corrected_timestamp =
+        (last_message_.imu().timestamp() - ecu_timestamp - total_delay +
+         pc_timestamp.nanoseconds() / 1000000);
+
+    msg.header.stamp =
+        rclcpp::Time(corrected_timestamp / 1000, 1'000'000*(corrected_timestamp % 1000));
+    const int dt = (rclcpp::Time(msg.header.stamp) - this->get_clock()->now()).nanoseconds();
+    if (dt > 0)
+    {
+        sync = true;
+        RCLCPP_WARN(this->get_logger(), "SYNC PC-ECU Timestamps (dt=%d)", dt);
+    }
+
     msg.header.frame_id = "imu";
 
     msg.linear_acceleration.x = last_message_.imu().acc().x() / 1000.f;
@@ -670,14 +705,22 @@ void RobotSerial::publish_imu()
     temp_msg.temperature = last_message_.imu().temperature();
     temp_msg.variance = 0;
 
-    // RCLCPP_INFO_THROTTLE(
-    //     this->get_logger(), *this->get_clock(), 100,
-    //     "Robot Feedback IMU| aX: %d | aY: %d | vW: %d | T: %.2f | t: %ld",
-    //     last_message_.imu().acc().x(),
-    //     last_message_.imu().acc().y(),
-    //     last_message_.imu().gyro().z(),
-    //     last_message_.imu().temperature(),
-    //     last_message_.imu().timestamp());
+    unsigned long dtECU =
+        (last_message_.imu().timestamp() - total_delay) - ecu_timestamp;
+    float dtPC = (last_message_timestamp_ - pc_timestamp).nanoseconds() / 1e6;
+    static float ddt = 0, dddt = 0;
+    dddt = (dtECU - dtPC) - ddt;
+    ddt = dtECU - dtPC;
+
+    std_msgs::msg::Float32 dt_msg;
+    dt_msg.data = ddt;
+    imu_dt_pub_->publish(dt_msg);
+
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100,
+                         "Robot Feedback IMU | t: %ld | dt(ECU): %ld ms | "
+                         "dt(PC): %.0f ms | ddt: %.2f ms - %.2f",
+                         last_message_.imu().timestamp() - total_delay, dtECU,
+                         dtPC, ddt, dddt);
 
     imu_temperature_pub_->publish(temp_msg);
     imu_pub_->publish(msg);
