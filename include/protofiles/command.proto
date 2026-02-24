@@ -47,4 +47,5 @@ message CommandMessage
   optional RobotState state = 4;
   optional RobotActions actions = 5;
   optional RobotConfig config = 6;
+  optional TimeSync sync = 7;
 }

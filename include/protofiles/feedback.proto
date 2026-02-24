@@ -232,7 +232,7 @@ message IMU
   Array3D gyro = 2;
   float temperature = 3;
   Angle angle = 4;
-  sint64 timestamp = 5;
+  uint64 timestamp = 5;
   bool linear_motion_detected = 6;
   bool angular_motion_detected = 7;
 }
@@ -309,4 +309,6 @@ message FeedbackMessage
   // reconhecido. Comandos opcionais: RobotActions, RobotConfig, RobotState,
   // WakeUpConfig, timestamp
   optional bool last_command_ok = 12;
+
+  optional TimeSync sync = 13;
 }

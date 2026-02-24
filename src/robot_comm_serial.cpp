@@ -346,9 +346,19 @@ void RobotSerial::command_callback()
         velocity->set_angular(0);
     }
 
-    bool ok = false;
-    size_t message_sz = 0;
+    if (last_message_.has_sync())
+    {
+        TimeSync* sync = last_command_.mutable_sync();
+        sync->set_t_mcu_send(last_message_.sync().t_mcu_send());
+        sync->set_t_ros_recv(last_message_.sync().t_ros_recv());
+        sync->set_t_ros_send(this->get_clock()->now().nanoseconds());
+        sync->set_t_mcu_recv(0);
 
+        last_message_.clear_sync();
+    }
+
+    size_t message_sz = 0;
+    bool ok = false;
     try
     {
         ok = last_command_.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
@@ -410,6 +420,17 @@ void RobotSerial::clear_command()
     if (last_command_.has_config())
     {
         last_command_.clear_config();
+    }
+
+    if (last_command_.has_sync())
+    {
+        RCLCPP_DEBUG(
+            this->get_logger(),
+            "Sync Sent: MCU Send %ld us, ROS Recv %ld ns, ROS Send %ld ns",
+            last_command_.sync().t_mcu_send(),
+            last_command_.sync().t_ros_recv(),
+            last_command_.sync().t_ros_send());
+        last_command_.clear_sync();
     }
 }
 
@@ -518,14 +539,27 @@ void RobotSerial::decode_buffer()
                                  message.DebugString().c_str());
 
                     last_message_ = message;
+
+                    if (last_message_.has_sync())
+                    {
+                        last_message_.mutable_sync()->set_t_ros_recv(
+                            this->get_clock()->now().nanoseconds());
+
+                        RCLCPP_DEBUG(
+                            this->get_logger(),
+                            "Sync Received: MCU Send %ld us, ROS Recv %ld ns",
+                            last_message_.sync().t_mcu_send(),
+                            last_message_.sync().t_ros_recv());
+                    }
+
                     last_message_timestamp_ = this->get_clock()->now();
 
-                    RCLCPP_INFO_THROTTLE(
-                        this->get_logger(), *this->get_clock(), 1000,
-                        "Decode: %.3f ms | Transfer: %.3f ms",
-                        (this->get_clock()->now() - decode_time).nanoseconds() /
-                            1e6,
-                        decode_result.out_len * 1000.f * 10.f / 2000000.f);
+                    // RCLCPP_INFO_THROTTLE(
+                    //     this->get_logger(), *this->get_clock(), 1000,
+                    //     "Decode: %.3f ms | Transfer: %.3f ms",
+                    //     (this->get_clock()->now() - decode_time).nanoseconds() /
+                    //         1e6,
+                    //     decode_result.out_len * 1000.f * 10.f / 2000000.f);
                     last_message_ok_ = true;
                 }
                 else
@@ -638,31 +672,13 @@ void RobotSerial::publish_imu()
     sensor_msgs::msg::Imu msg;
     sensor_msgs::msg::Temperature temp_msg;
 
-    static bool sync = true;
-    static unsigned long ecu_timestamp = 0;
-    static rclcpp::Time pc_timestamp = last_message_timestamp_;
-    // 2 -> proccess
-    // 4 -> transmission
-    const unsigned long total_delay = 2 + 4;
-    if (sync && last_message_.imu().timestamp() > 0)
+    // IMU sendo calibrada
+    if (last_message_.imu().timestamp() == 0)
     {
-        sync = false;
-        ecu_timestamp = last_message_.imu().timestamp();
-        pc_timestamp = last_message_timestamp_;
-    }
-    const unsigned long corrected_timestamp =
-        (last_message_.imu().timestamp() - ecu_timestamp - total_delay +
-         pc_timestamp.nanoseconds() / 1000000);
-
-    msg.header.stamp =
-        rclcpp::Time(corrected_timestamp / 1000, 1'000'000*(corrected_timestamp % 1000));
-    const int dt = (rclcpp::Time(msg.header.stamp) - this->get_clock()->now()).nanoseconds();
-    if (dt > 0)
-    {
-        sync = true;
-        RCLCPP_WARN(this->get_logger(), "SYNC PC-ECU Timestamps (dt=%d)", dt);
+        return;
     }
 
+    msg.header.stamp = rclcpp::Time(last_message_.imu().timestamp());
     msg.header.frame_id = "imu";
 
     msg.linear_acceleration.x = last_message_.imu().acc().x() / 1000.f;
@@ -704,23 +720,6 @@ void RobotSerial::publish_imu()
     temp_msg.header.frame_id = "imu";
     temp_msg.temperature = last_message_.imu().temperature();
     temp_msg.variance = 0;
-
-    unsigned long dtECU =
-        (last_message_.imu().timestamp() - total_delay) - ecu_timestamp;
-    float dtPC = (last_message_timestamp_ - pc_timestamp).nanoseconds() / 1e6;
-    static float ddt = 0, dddt = 0;
-    dddt = (dtECU - dtPC) - ddt;
-    ddt = dtECU - dtPC;
-
-    std_msgs::msg::Float32 dt_msg;
-    dt_msg.data = ddt;
-    imu_dt_pub_->publish(dt_msg);
-
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 100,
-                         "Robot Feedback IMU | t: %ld | dt(ECU): %ld ms | "
-                         "dt(PC): %.0f ms | ddt: %.2f ms - %.2f",
-                         last_message_.imu().timestamp() - total_delay, dtECU,
-                         dtPC, ddt, dddt);
 
     imu_temperature_pub_->publish(temp_msg);
     imu_pub_->publish(msg);
