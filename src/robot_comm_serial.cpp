@@ -123,8 +123,6 @@ RobotSerial::RobotSerial()
         "robot_base/flags", best_effort_qos);
     imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
                                                              best_effort_qos);
-    imu_dt_pub_ = this->create_publisher<std_msgs::msg::Float32>(
-        "robot_base/dt_imu", best_effort_qos);
     imu_temperature_pub_ =
         this->create_publisher<sensor_msgs::msg::Temperature>(
             "robot_base/imu_temperature", best_effort_qos);
@@ -268,13 +266,13 @@ void RobotSerial::packet_callback()
             RCLCPP_DEBUG(this->get_logger(), "Data available! %ld",
                          available_data);
             packet_size_ = 0;
-            memset(buffer_, 0xFF, MAX_PACKET_SIZE);
+            memset(buffer_, 0xFF, sizeof(buffer_));
         }
 
+        size_t requestedBytes = std::min(serial_port_->available(),
+                                         MAX_PACKET_SIZE - current_buffer_pos_);
         size_t aux =
-            serial_port_->read(&buffer_[current_buffer_pos_],
-                               std::min(serial_port_->available(),
-                                        MAX_PACKET_SIZE - current_buffer_pos_));
+            serial_port_->read(&buffer_[current_buffer_pos_], requestedBytes);
 
         if (current_buffer_pos_ == 0)
         {
@@ -482,19 +480,19 @@ void RobotSerial::decode_buffer()
 
     while (end_byte_count > 0)
     {
-        memset(decoded_packet_, 0x00, MAX_PACKET_SIZE);
+        memset(decoded_packet_, 0x00, sizeof(decoded_packet_));
         packet_sz = end_pos.at(packet_count) - packet_start;
 
         cobs_decode_result decode_result =
-            cobs_decode(decoded_packet_, MAX_PACKET_SIZE,
+            cobs_decode(decoded_packet_, sizeof(decoded_packet_),
                         &buffer_[packet_start], packet_sz);
 
         if (decode_result.status != COBS_DECODE_OK)
         {
-            RCLCPP_ERROR(
-                this->get_logger(), "Failed to decode COBS packet: %d. %s",
-                decode_result.status,
-                packet_to_str(&buffer_[packet_start], packet_sz).c_str());
+            RCLCPP_ERROR(this->get_logger(),
+                         "Failed to decode COBS packet! Error Code:%d. %s",
+                         decode_result.status,
+                         packet_to_str(&buffer_[packet_start], packet_sz+10).c_str());
         }
         else if (decode_result.out_len == 0)
         {
@@ -512,7 +510,8 @@ void RobotSerial::decode_buffer()
             CRC_t crc_check = crcFast(decoded_packet_, decode_result.out_len);
             if (crc_check != CRC_OK)
             {
-                RCLCPP_ERROR(this->get_logger(), "Invalid CRC Value");
+                RCLCPP_ERROR(this->get_logger(), "Invalid CRC Value! %d != %d",
+                             crc_check, CRC_OK);
             }
             else
             {
@@ -557,7 +556,8 @@ void RobotSerial::decode_buffer()
                     // RCLCPP_INFO_THROTTLE(
                     //     this->get_logger(), *this->get_clock(), 1000,
                     //     "Decode: %.3f ms | Transfer: %.3f ms",
-                    //     (this->get_clock()->now() - decode_time).nanoseconds() /
+                    //     (this->get_clock()->now() -
+                    //     decode_time).nanoseconds() /
                     //         1e6,
                     //     decode_result.out_len * 1000.f * 10.f / 2000000.f);
                     last_message_ok_ = true;
@@ -570,6 +570,7 @@ void RobotSerial::decode_buffer()
             }
         }
 
+        memset(&buffer_[packet_start], 0xFF, packet_sz);
         packet_start = end_pos.at(packet_count) + 1;
         packet_count++;
         end_byte_count--;
@@ -689,18 +690,27 @@ void RobotSerial::publish_imu()
     // 0 1 2
     // 3 4 5
     // 6 7 8
-    msg.linear_acceleration_covariance[0] = 1.0;
-    msg.linear_acceleration_covariance[4] = 1.0;
-    msg.linear_acceleration_covariance[8] = 1.0;
+    const auto& imu_lin_cov_proto =
+        last_message_.imu().linear_acc_covariances();
+    if (imu_lin_cov_proto.size() == 9)
+    {
+        std::copy(imu_lin_cov_proto.begin(), imu_lin_cov_proto.end(),
+                  msg.linear_acceleration_covariance.begin());
+    }
 
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
+
     std::fill(msg.angular_velocity_covariance.begin(),
               msg.angular_velocity_covariance.end(), 0.0);
-    msg.angular_velocity_covariance[0] = 1e-3;
-    msg.angular_velocity_covariance[4] = 1e-3;
-    msg.angular_velocity_covariance[8] = 1e-3;
+    const auto& imu_ang_cov_proto =
+        last_message_.imu().angular_vel_covariances();
+    if (imu_ang_cov_proto.size() == 9)
+    {
+        std::copy(imu_ang_cov_proto.begin(), imu_ang_cov_proto.end(),
+                  msg.angular_velocity_covariance.begin());
+    }
 
     tf2::Quaternion q;
     q.setRPY(last_message_.imu().angle().roll(),
@@ -1441,7 +1451,8 @@ void RobotSerial::publish_full_status()
 
     status["pose"] = {{"x", last_message_.pose().x_mm() / 1000.0},
                       {"y", last_message_.pose().y_mm() / 1000.0},
-                      {"theta", last_message_.pose().yaw_trad() / 1000.0}};
+                      {"theta", last_message_.imu().angle().yaw()}};
+    // {"theta", last_message_.pose().yaw_trad() / 1000.0}};
 
     status["encoders"] = {
         {"left_pulses", last_message_.encoder().left_pos()},

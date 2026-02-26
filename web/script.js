@@ -502,8 +502,6 @@ Recuperações:       ${info.recoveries   || '0'}`;
         document.getElementById('pose-val-theta').textContent = pose.theta.toFixed(3);
         
         drawPose();
-
-        drawPose();
     }
 
     function drawPose() {

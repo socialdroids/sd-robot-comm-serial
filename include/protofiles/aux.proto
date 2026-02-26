@@ -75,8 +75,8 @@ message RobotHardware
 }
 
 message TimeSync {
-  uint64 t_mcu_send = 1;   // micros STM32 quando enviou
-  uint64 t_ros_recv = 2;   // ns ROS quando recebeu
-  uint64 t_ros_send = 3;   // ns ROS quando respondeu
-  uint64 t_mcu_recv = 4;   // micros STM32 quando recebeu resposta
+  uint64 t_mcu_send = 1; /**< ECU timestamp raw de envio em [us] */ 
+  uint64 t_ros_recv = 2; /**< ROS timestamp de recebimento em [ns] */ 
+  uint64 t_ros_send = 3; /**< ROS timestamp de envio em [ns] */
+  uint64 t_mcu_recv = 4; /**< ECU timestamp raw de recebimento em [us] */
 }

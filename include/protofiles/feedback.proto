@@ -213,14 +213,14 @@ message Pose
   sint64 x_mm = 1;
   sint64 y_mm = 2;
   sint32 yaw_trad = 3;
-  repeated double covariance = 4 [(nanopb).max_count = 36];
+  repeated double covariances = 4 [(nanopb).max_count = 36];
 }
 
 message Velocities
 {
   sint32 linear_mm_s = 1;
   sint32 angular_trad_s = 2;
-  repeated double covariance = 3 [(nanopb).max_count = 36];
+  repeated double covariances = 3 [(nanopb).max_count = 36];
 
   sint32 left_wheel_mm_s = 4;
   sint32 right_wheel_mm_s = 5;
@@ -235,6 +235,8 @@ message IMU
   uint64 timestamp = 5;
   bool linear_motion_detected = 6;
   bool angular_motion_detected = 7;
+  repeated float angular_vel_covariances = 8 [(nanopb).max_count = 9];
+  repeated float linear_acc_covariances = 9 [(nanopb).max_count = 9];
 }
 
 message Encoder
