@@ -52,6 +52,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(tf2 REQUIRED)
@@ -76,6 +77,7 @@ set(DEPENDENCIES
   nav_msgs
   visualization_msgs 
   sensor_msgs
+  std_srvs
   Protobuf
   sd_msgs
   tf2

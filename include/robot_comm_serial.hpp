@@ -5,6 +5,7 @@
 #include <deque>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/service.hpp>
 #include <serial/serial.h>
 #include <string.h>
 
@@ -17,6 +18,8 @@
 #include "sensor_msgs/msg/battery_state.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_srvs/srv/set_bool.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 #include "navigation_tester.hpp"
 #include "websocket_interface.hpp"
@@ -111,6 +114,9 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
 
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enter_standby_srv_;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr emg_stop_srv_;
+
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
     rclcpp::TimerBase::SharedPtr reconnect_timer_;
@@ -153,8 +159,22 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
 
     size_t MAX_RTOS_TASKS;
 
+    struct RobotActionStatus {
+        bool active;
+        uint8_t sent;
+        std::chrono::time_point<high_resolution_clock> sentTimestamp;
+        bool confirmed;
+        bool data;
+    } jumpToBootStatus, enterStandByStatus, emergencyStopStatus;
+
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
+    void enter_standby_srv_callback(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+    void emergency_stop_srv_callback(
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response);
     void packet_callback();
     void reconnect_callback();
     void command_callback();
@@ -168,6 +188,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     void update_packet_frequency();
     float packet_frequency();
     std::string packet_to_str(uint8_t const* _buffer, size_t _buffLen);
+    void manage_robot_actions();
 
     void publish_data();
     void publish_power_status();

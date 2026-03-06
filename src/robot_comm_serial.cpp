@@ -44,6 +44,7 @@ int setupAudio()
         // SDL_Quit();
         return 1;
     }
+    return 0;
 }
 
 int playSound(std::string _path)
@@ -152,6 +153,15 @@ RobotSerial::RobotSerial()
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
 
+    enter_standby_srv_ = this->create_service<std_srvs::srv::Trigger>(
+        "enter_stand_by",
+        std::bind(&RobotSerial::enter_standby_srv_callback, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    emg_stop_srv_ = this->create_service<std_srvs::srv::SetBool>(
+        "emergency_stop",
+        std::bind(&RobotSerial::emergency_stop_srv_callback, this,
+                  std::placeholders::_1, std::placeholders::_2));
+
     setupAudio();
     connect();
 
@@ -232,10 +242,85 @@ void RobotSerial::cmd_vel_callback(
 void RobotSerial::jump_to_boot_callback(
     const std_msgs::msg::Bool::SharedPtr msg)
 {
-    RobotActions* action = last_command_.mutable_actions();
     RCLCPP_INFO(this->get_logger(), "[Robot Action] Jump to boot? %d",
                 msg->data);
-    action->set_jump_to_boot(msg->data);
+    if (not enterStandByStatus.active && not emergencyStopStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_jump_to_boot(msg->data);
+        jumpToBootStatus.active = true;
+        jumpToBootStatus.confirmed = false;
+        jumpToBootStatus.sent = 1;
+        jumpToBootStatus.data = msg->data;
+        jumpToBootStatus.sentTimestamp = high_resolution_clock::now();
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send JumpToBoot request! Another "
+            "action is already queued! EnterStandBy=%d, EmergencyStop=%d",
+            enterStandByStatus.active, emergencyStopStatus.active);
+    }
+}
+
+void RobotSerial::enter_standby_srv_callback(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] Enter Stand-By!");
+    if (not jumpToBootStatus.active && not emergencyStopStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_enter_stand_by(true);
+        enterStandByStatus.active = true;
+        enterStandByStatus.confirmed = false;
+        enterStandByStatus.sent = 1;
+        enterStandByStatus.data = true;
+        enterStandByStatus.sentTimestamp = high_resolution_clock::now();
+
+        response->success = true;
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send Stand-By request! Another "
+            "action is already queued! JumpToBoot=%d, EmergencyStop=%d",
+            jumpToBootStatus.active, emergencyStopStatus.active);
+        response->success = false;
+        response->message = "Another action request is running!";
+    }
+}
+
+void RobotSerial::emergency_stop_srv_callback(
+    const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+    std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] Emergency Stop? %d",
+                request->data);
+    if (not jumpToBootStatus.active && not enterStandByStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_emergency_stop(request->data);
+        emergencyStopStatus.active = true;
+        emergencyStopStatus.confirmed = false;
+        emergencyStopStatus.sent = 1;
+        emergencyStopStatus.data = request->data;
+        emergencyStopStatus.sentTimestamp = high_resolution_clock::now();
+
+        response->success = true;
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send Emergency Stop request! Another "
+            "action is already queued! JumpToBoot=%d, EnterStandBy=%d",
+            jumpToBootStatus.active, enterStandByStatus.active);
+        response->success = false;
+        response->message = "Another action request is running!";
+    }
 }
 
 void RobotSerial::packet_callback()
@@ -325,6 +410,8 @@ void RobotSerial::command_callback()
             shared_from_this(),
             ament_index_cpp::get_package_share_directory("robot_comm_serial"));
     }
+
+    manage_robot_actions();
 
     if (!connected_)
     {
@@ -489,10 +576,11 @@ void RobotSerial::decode_buffer()
 
         if (decode_result.status != COBS_DECODE_OK)
         {
-            RCLCPP_ERROR(this->get_logger(),
-                         "Failed to decode COBS packet! Error Code:%d. %s",
-                         decode_result.status,
-                         packet_to_str(&buffer_[packet_start], packet_sz+10).c_str());
+            RCLCPP_ERROR(
+                this->get_logger(),
+                "Failed to decode COBS packet! Error Code:%d. %s",
+                decode_result.status,
+                packet_to_str(&buffer_[packet_start], packet_sz + 10).c_str());
         }
         else if (decode_result.out_len == 0)
         {
@@ -630,6 +718,76 @@ std::string RobotSerial::packet_to_str(uint8_t const* _buffer, size_t _buffLen)
     return aux.str();
 }
 
+void RobotSerial::manage_robot_actions()
+{
+    RobotActionStatus* currentAction = nullptr;
+    if (jumpToBootStatus.active)
+    {
+        currentAction = &jumpToBootStatus;
+    }
+    if (enterStandByStatus.active)
+    {
+        currentAction = &enterStandByStatus;
+    }
+    if (emergencyStopStatus.active)
+    {
+        currentAction = &emergencyStopStatus;
+    }
+
+    if (currentAction == nullptr)
+    {
+        return;
+    }
+
+    uint8_t maxRetries = 20;
+
+    if (timeSince<milliseconds>(currentAction->sentTimestamp) > 1000 &&
+        not currentAction->confirmed)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        if (jumpToBootStatus.active)
+        {
+            action->set_jump_to_boot(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action JumpToBoot expired without "
+                        "confirmation, send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+        if (enterStandByStatus.active)
+        {
+            action->set_enter_stand_by(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action EnterStandBy expired without confirmation, "
+                        "send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+        if (emergencyStopStatus.active)
+        {
+            action->set_emergency_stop(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action EmergencyStop expired without confirmation, "
+                        "send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+        currentAction->sentTimestamp = high_resolution_clock::now();
+        currentAction->sent++;
+
+        if (currentAction->sent > maxRetries)
+        {
+            RCLCPP_ERROR(
+                this->get_logger(),
+                "Aborting current action, maximum number of retries reached!");
+            jumpToBootStatus.active = false;
+            enterStandByStatus.active = false;
+            emergencyStopStatus.active = false;
+
+            jumpToBootStatus.confirmed = true;
+            enterStandByStatus.confirmed = true;
+            emergencyStopStatus.confirmed = true;
+        }
+    }
+}
+
 void RobotSerial::publish_data()
 {
     if (!last_message_ok_)
@@ -653,6 +811,14 @@ void RobotSerial::publish_data()
     {
         RCLCPP_INFO(this->get_logger(), "Last Command ok: %d",
                     last_message_.last_command_ok());
+
+        jumpToBootStatus.active = false;
+        enterStandByStatus.active = false;
+        emergencyStopStatus.active = false;
+
+        jumpToBootStatus.confirmed = true;
+        enterStandByStatus.confirmed = true;
+        emergencyStopStatus.confirmed = true;
     }
 
     last_message_ok_ = false;
@@ -1418,7 +1584,7 @@ void RobotSerial::publish_full_status()
             dt = this->get_clock()->now().seconds();
 
             size_t index = std::rand() % (music_files.size());
-            int ok = playSound(music_files.at(index).c_str());
+            playSound(music_files.at(index).c_str());
         }
     }
 

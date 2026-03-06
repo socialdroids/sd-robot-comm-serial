@@ -30,6 +30,7 @@ message RobotActions
   optional TestMode test_mode = 3;
   optional bool read_sd_card = 4;
   optional bool dump_parameters = 5;
+  optional bool enter_stand_by = 6;
 }
 
 message RobotConfig
