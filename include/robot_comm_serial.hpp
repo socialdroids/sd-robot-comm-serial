@@ -49,6 +49,7 @@
 #include "sd_msgs/msg/robot_encoders.hpp"
 #include "sd_msgs/msg/robot_flags.hpp"
 #include "sd_msgs/msg/robot_parameters.hpp"
+#include "sd_msgs/msg/power_on_time.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -109,6 +110,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Publisher<sd_msgs::msg::BaseParams>::SharedPtr base_params_pub_;
 
     rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
+    rclcpp::Publisher<sd_msgs::msg::PowerOnTime>::SharedPtr power_on_time_pub_;
     rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
 
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
@@ -192,6 +194,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
 
     void publish_data();
     void publish_power_status();
+    void publish_stand_by_status();
 
     void publish_flags();
     void publish_imu();

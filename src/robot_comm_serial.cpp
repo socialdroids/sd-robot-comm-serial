@@ -14,7 +14,7 @@
 volatile bool finished = true, mute = true;
 Mix_Chunk* sound = nullptr;
 
-void finishedCallback(int _ch)
+void finishedCallback(int /*_ch*/)
 {
     if (sound != nullptr)
     {
@@ -141,6 +141,8 @@ RobotSerial::RobotSerial()
 
     power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
         "robot_base/power", best_effort_qos);
+    power_on_time_pub_ = this->create_publisher<sd_msgs::msg::PowerOnTime>(
+        "robot_base/power_on_time", best_effort_qos);
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
         "robot_base/battery", best_effort_qos);
 
@@ -804,6 +806,7 @@ void RobotSerial::publish_data()
     publish_rtos_info();
     publish_base_params();
     publish_power_status();
+    publish_stand_by_status();
     publish_battery();
     publish_robot_config();
 
@@ -828,9 +831,14 @@ void RobotSerial::publish_flags()
 {
     sd_msgs::msg::RobotFlags msg;
     msg.emergency_button_status = last_message_.emergency_button_pressed();
+
     msg.colision_detected = last_message_.colision_detected();
     msg.motion_detection = last_message_.imu().linear_motion_detected();
-    // msg.motion_detection = last_message_.imu().angular_motion_detected();
+    msg.angular_motion_detection =
+        last_message_.imu().angular_motion_detected();
+
+    msg.stand_by_requested = last_message_.stand_by().stand_by_request();
+    msg.stand_by_confirmed = last_message_.stand_by().stand_by_confirm();
     robot_flags_pub_->publish(msg);
 }
 
@@ -1671,6 +1679,35 @@ void RobotSerial::publish_power_status()
     msg.internal_temp.header.frame_id = "mcu";
 
     power_status_pub_->publish(msg);
+}
+
+void RobotSerial::publish_stand_by_status()
+{
+    sd_msgs::msg::PowerOnTime onTimeMsg;
+    onTimeMsg.hour = last_message_.stand_by().wake_up().hour();
+    onTimeMsg.minutes = last_message_.stand_by().wake_up().minutes();
+    onTimeMsg.sunday = last_message_.stand_by().wake_up().has_sunday()
+                           ? last_message_.stand_by().wake_up().sunday()
+                           : false;
+    onTimeMsg.monday = last_message_.stand_by().wake_up().has_monday()
+                           ? last_message_.stand_by().wake_up().monday()
+                           : false;
+    onTimeMsg.tuesday = last_message_.stand_by().wake_up().has_tuesday()
+                            ? last_message_.stand_by().wake_up().tuesday()
+                            : false;
+    onTimeMsg.wednesday = last_message_.stand_by().wake_up().has_wednesday()
+                              ? last_message_.stand_by().wake_up().wednesday()
+                              : false;
+    onTimeMsg.thursday = last_message_.stand_by().wake_up().has_thursday()
+                             ? last_message_.stand_by().wake_up().thursday()
+                             : false;
+    onTimeMsg.friday = last_message_.stand_by().wake_up().has_friday()
+                           ? last_message_.stand_by().wake_up().friday()
+                           : false;
+    onTimeMsg.saturday = last_message_.stand_by().wake_up().has_saturday()
+                             ? last_message_.stand_by().wake_up().saturday()
+                             : false;
+    power_on_time_pub_->publish(onTimeMsg);
 }
 
 int main(int argc, char* argv[])
