@@ -31,6 +31,8 @@
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include <yaml-cpp/yaml.h>
 
+#include "control_logger.hpp"
+
 // Para ler a pose do robô
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/buffer.h>
@@ -168,6 +170,8 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         bool confirmed;
         bool data;
     } jumpToBootStatus, enterStandByStatus, emergencyStopStatus;
+
+    ControlLogger cLogger;
 
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);

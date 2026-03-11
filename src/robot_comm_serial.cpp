@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <sstream>
@@ -875,6 +876,18 @@ void RobotSerial::publish_imu()
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
+
+    if (not cLogger.isFull())
+    {
+        cLogger.addData(this->get_clock()->now().nanoseconds(),
+                        last_command_.velocities().angular() / 1000.f,
+                        msg.angular_velocity.z);
+    }
+    else if (not cLogger.isSaved())
+    {
+        cLogger.saveFile();
+        RCLCPP_INFO(this->get_logger(), "[CONTROL] Step data saved!");
+    }
 
     std::fill(msg.angular_velocity_covariance.begin(),
               msg.angular_velocity_covariance.end(), 0.0);
