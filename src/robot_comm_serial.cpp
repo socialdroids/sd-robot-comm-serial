@@ -276,6 +276,8 @@ void RobotSerial::enter_standby_srv_callback(
     {
         RobotActions* action = last_command_.mutable_actions();
         action->set_enter_stand_by(true);
+        last_command_.set_state(RobotState::ROBOT_STATE_STAND_BY);
+        
         enterStandByStatus.active = true;
         enterStandByStatus.confirmed = false;
         enterStandByStatus.sent = 1;
@@ -503,6 +505,10 @@ void RobotSerial::clear_command()
     if (last_command_.has_actions())
     {
         last_command_.clear_actions();
+        if (last_command_.has_state())
+        {
+            last_command_.clear_state();
+        }
     }
 
     if (last_command_.has_config())
