@@ -29,8 +29,6 @@
 #include "feedback.pb.h"
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
-#include <yaml-cpp/yaml.h>
-
 #include "control_logger.hpp"
 
 // Para ler a pose do robô
@@ -271,24 +269,6 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
             connected_ = false;
         }
     }
-
-    template <typename T>
-    T yaml_get_value(const YAML::Node& node, const std::string& key)
-    {
-        try
-        {
-            return node[key].as<T>();
-        }
-        catch (YAML::Exception& e)
-        {
-            std::stringstream ss;
-            ss << "Failed to parse YAML tag '" << key
-               << "' for reason: " << e.msg;
-            throw YAML::Exception(e.mark, ss.str());
-        }
-    }
-    // auto image_file_name = yaml_get_value<std::string>(doc, "image");
-    // load_parameters.resolution = yaml_get_value<double>(doc, "resolution");
 };
 
 #endif // INCLUDE_INCLUDE_ROBOT_COMM_SERIAL_HPP_

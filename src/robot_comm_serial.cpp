@@ -79,30 +79,25 @@ int playSound(std::string _path)
 }
 
 RobotSerial::RobotSerial()
-    : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
+    : Node("robot_comm_serial"), baud_(1000000), port_("/dev/ttyACM0"),
       connected_(false)
 {
-
-    std::string share_dir =
-        ament_index_cpp::get_package_share_directory("robot_comm_serial");
-    std::string config_file = share_dir + "/config/robot_serial.yaml";
-    RCLCPP_INFO(this->get_logger(), "Loading Config File: %s",
-                config_file.c_str());
-
     // === CONFIGURAÇÕES
-    YAML::Node config = YAML::LoadFile(config_file);
-    port_ = yaml_get_value<std::string>(config, "serial_port");
-    baud_ = yaml_get_value<unsigned long>(config, "baud_rate");
-    int reception_freq = yaml_get_value<int>(config, "reception_frequency");
+    port_ = this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
+    baud_ = this->declare_parameter<int>("baud_rate", 1000000);
+    int reception_freq =
+        this->declare_parameter<int>("reception_frequency", 100);
     int reconnection_freq =
-        yaml_get_value<int>(config, "reconnection_frequency");
-    int command_freq = yaml_get_value<int>(config, "command_frequency");
-    fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
+        this->declare_parameter<int>("reconnection_frequency", 1);
+    int command_freq = this->declare_parameter<int>("command_frequency", 100);
+    fake_charging_ = this->declare_parameter<bool>("fake_charging", false);
     fake_charging_radius_ =
-        yaml_get_value<double>(config, "fake_charging_radius");
+        this->declare_parameter<double>("fake_charging_radius", 0.1);
+
     fake_charging_fail_count_ = 0;
 
-    MAX_RTOS_TASKS = yaml_get_value<unsigned long>(config, "max_rtos_tasks");
+    MAX_RTOS_TASKS =
+        this->declare_parameter<int>("max_rtos_tasks", 10);
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
@@ -277,7 +272,7 @@ void RobotSerial::enter_standby_srv_callback(
         RobotActions* action = last_command_.mutable_actions();
         action->set_enter_stand_by(true);
         last_command_.set_state(RobotState::ROBOT_STATE_STAND_BY);
-        
+
         enterStandByStatus.active = true;
         enterStandByStatus.confirmed = false;
         enterStandByStatus.sent = 1;
