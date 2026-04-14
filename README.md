@@ -1,13 +1,49 @@
 # Serial Communication Library
 
-## SD Info
+## About Protofiles
 
-When updating .proto files, you need to force CMake to run again with the
+When updating `.proto` files, you need to force CMake to run again with the
 following command:
 ```shell
 colcon build --cmake-force-configure
 ```
 Not doing so might result in the code not using the updated protofiles.
+
+## Dependencies
+
+```shell
+sudo apt install libsdl2-dev libsdl2-mixer-dev
+```
+
+## Running as Systemd service
+
+1. Create symlinks
+```shell
+# Service symlink
+cd /etc/systemd/service
+ln -s ~/ws_socialdroids/src/socialdroids/sd-robot-comm-serial/scripts/robot_comm_serial@.service .
+
+# Launch symlink
+cd /usr/local/bin
+sudo ln -s ~/ws_socialdroids/src/socialdroids/sd-robot-comm-serial/scripts/run_as_service.sh .
+```
+
+2. Enable systemd service
+```shell
+sudo systemctl daemon-reload
+sudo systemctl enable robot_comm_serial@<USER>.service
+sudo systemctl start robot_comm_serial@<USER>.service
+```
+
+3. Check status
+```shell
+systemctl status robot_comm_serial@<USER>.service
+```
+> [!NOTE]
+> `<USER>` should be the computer's username, e.g. `socialdroids`.
+
+
+## Serial Library Info
 
 [![Build Status](https://travis-ci.org/wjwwood/serial.svg?branch=master)](https://travis-ci.org/wjwwood/serial)*(Linux and OS X)* [![Build Status](https://ci.appveyor.com/api/projects/status/github/wjwwood/serial)](https://ci.appveyor.com/project/wjwwood/serial)*(Windows)*
 
@@ -22,9 +58,3 @@ Serial is a class that provides the basic interface common to serial libraries (
 Website: http://wjwwood.github.com/serial/
 
 API Documentation: http://wjwwood.github.com/serial/doc/1.1.0/index.html
-
-### Dependencies
-
-```shell
-sudo apt install libsdl2-dev libsdl2-mixer-dev
-```

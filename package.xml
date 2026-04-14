@@ -36,11 +36,11 @@
   <depend>sd_msgs</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
-  <depend>nlohmann_json</depend>
+  <depend>nlohmann-json-dev</depend>
   <depend>visualization_msgs</depend>
   <depend>backward_ros</depend>
-  <depend>libsdl2-dev</depend>
-  <depend>libsdl2-mixer-dev</depend>
+  <depend>sdl2</depend>
+  <depend>sdl2-mixer</depend>
 
   <export>
   <build_type>ament_cmake</build_type>

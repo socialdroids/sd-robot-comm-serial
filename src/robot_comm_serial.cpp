@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <sstream>
@@ -11,10 +12,10 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 
-volatile bool finished = true;
+volatile bool finished = true, mute = true;
 Mix_Chunk* sound = nullptr;
 
-void finishedCallback(int _ch)
+void finishedCallback(int /*_ch*/)
 {
     if (sound != nullptr)
     {
@@ -30,7 +31,8 @@ int setupAudio()
     // Initialize SDL
     if (SDL_Init(SDL_INIT_AUDIO) < 0)
     {
-        // std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
+        // std::cerr << "SDL could not initialize! SDL Error: " <<
+        // SDL_GetError()
         //           << std::endl;
         return 1;
     }
@@ -43,10 +45,15 @@ int setupAudio()
         // SDL_Quit();
         return 1;
     }
+    return 0;
 }
 
 int playSound(std::string _path)
 {
+    if (mute)
+    {
+        return 0;
+    }
     // std::cout << "Play " << _path << std::endl;
     // Load WAV file
     sound = Mix_LoadWAV(_path.c_str());
@@ -72,30 +79,25 @@ int playSound(std::string _path)
 }
 
 RobotSerial::RobotSerial()
-    : Node("RobotSerial"), baud_(1000000), port_("/dev/ttyACM0"),
+    : Node("robot_comm_serial"), baud_(1000000), port_("/dev/ttyACM0"),
       connected_(false)
 {
-
-    std::string share_dir =
-        ament_index_cpp::get_package_share_directory("robot_comm_serial");
-    std::string config_file = share_dir + "/config/robot_serial.yaml";
-    RCLCPP_INFO(this->get_logger(), "Loading Config File: %s",
-                config_file.c_str());
-
     // === CONFIGURAÇÕES
-    YAML::Node config = YAML::LoadFile(config_file);
-    port_ = yaml_get_value<std::string>(config, "serial_port");
-    baud_ = yaml_get_value<unsigned long>(config, "baud_rate");
-    int reception_freq = yaml_get_value<int>(config, "reception_frequency");
+    port_ = this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
+    baud_ = this->declare_parameter<int>("baud_rate", 1000000);
+    int reception_freq =
+        this->declare_parameter<int>("reception_frequency", 100);
     int reconnection_freq =
-        yaml_get_value<int>(config, "reconnection_frequency");
-    int command_freq = yaml_get_value<int>(config, "command_frequency");
-    fake_charging_ = yaml_get_value<bool>(config, "fake_charging");
+        this->declare_parameter<int>("reconnection_frequency", 1);
+    int command_freq = this->declare_parameter<int>("command_frequency", 100);
+    fake_charging_ = this->declare_parameter<bool>("fake_charging", false);
     fake_charging_radius_ =
-        yaml_get_value<double>(config, "fake_charging_radius");
+        this->declare_parameter<double>("fake_charging_radius", 0.1);
+
     fake_charging_fail_count_ = 0;
 
-    MAX_RTOS_TASKS = yaml_get_value<unsigned long>(config, "max_rtos_tasks");
+    MAX_RTOS_TASKS =
+        this->declare_parameter<int>("max_rtos_tasks", 10);
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
@@ -118,6 +120,10 @@ RobotSerial::RobotSerial()
         "robot_base/flags", best_effort_qos);
     imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("robot_base/imu",
                                                              best_effort_qos);
+    imu_temperature_pub_ =
+        this->create_publisher<sensor_msgs::msg::Temperature>(
+            "robot_base/imu_temperature", best_effort_qos);
+
     odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
         "robot_base/odometry", best_effort_qos);
     encoder_pub_ = this->create_publisher<sd_msgs::msg::RobotEncoders>(
@@ -131,6 +137,8 @@ RobotSerial::RobotSerial()
 
     power_status_pub_ = this->create_publisher<sd_msgs::msg::PowerStatus>(
         "robot_base/power", best_effort_qos);
+    power_on_time_pub_ = this->create_publisher<sd_msgs::msg::PowerOnTime>(
+        "robot_base/power_on_time", best_effort_qos);
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
         "robot_base/battery", best_effort_qos);
 
@@ -142,6 +150,15 @@ RobotSerial::RobotSerial()
         "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
+
+    enter_standby_srv_ = this->create_service<std_srvs::srv::Trigger>(
+        "enter_stand_by",
+        std::bind(&RobotSerial::enter_standby_srv_callback, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    emg_stop_srv_ = this->create_service<std_srvs::srv::SetBool>(
+        "emergency_stop",
+        std::bind(&RobotSerial::emergency_stop_srv_callback, this,
+                  std::placeholders::_1, std::placeholders::_2));
 
     setupAudio();
     connect();
@@ -223,10 +240,87 @@ void RobotSerial::cmd_vel_callback(
 void RobotSerial::jump_to_boot_callback(
     const std_msgs::msg::Bool::SharedPtr msg)
 {
-    RobotActions* action = last_command_.mutable_actions();
     RCLCPP_INFO(this->get_logger(), "[Robot Action] Jump to boot? %d",
                 msg->data);
-    action->set_jump_to_boot(msg->data);
+    if (not enterStandByStatus.active && not emergencyStopStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_jump_to_boot(msg->data);
+        jumpToBootStatus.active = true;
+        jumpToBootStatus.confirmed = false;
+        jumpToBootStatus.sent = 1;
+        jumpToBootStatus.data = msg->data;
+        jumpToBootStatus.sentTimestamp = high_resolution_clock::now();
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send JumpToBoot request! Another "
+            "action is already queued! EnterStandBy=%d, EmergencyStop=%d",
+            enterStandByStatus.active, emergencyStopStatus.active);
+    }
+}
+
+void RobotSerial::enter_standby_srv_callback(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] Enter Stand-By!");
+    if (not jumpToBootStatus.active && not emergencyStopStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_enter_stand_by(true);
+        last_command_.set_state(RobotState::ROBOT_STATE_STAND_BY);
+
+        enterStandByStatus.active = true;
+        enterStandByStatus.confirmed = false;
+        enterStandByStatus.sent = 1;
+        enterStandByStatus.data = true;
+        enterStandByStatus.sentTimestamp = high_resolution_clock::now();
+
+        response->success = true;
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send Stand-By request! Another "
+            "action is already queued! JumpToBoot=%d, EmergencyStop=%d",
+            jumpToBootStatus.active, emergencyStopStatus.active);
+        response->success = false;
+        response->message = "Another action request is running!";
+    }
+}
+
+void RobotSerial::emergency_stop_srv_callback(
+    const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+    std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] Emergency Stop? %d",
+                request->data);
+    if (not jumpToBootStatus.active && not enterStandByStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_emergency_stop(request->data);
+        emergencyStopStatus.active = true;
+        emergencyStopStatus.confirmed = false;
+        emergencyStopStatus.sent = 1;
+        emergencyStopStatus.data = request->data;
+        emergencyStopStatus.sentTimestamp = high_resolution_clock::now();
+
+        response->success = true;
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send Emergency Stop request! Another "
+            "action is already queued! JumpToBoot=%d, EnterStandBy=%d",
+            jumpToBootStatus.active, enterStandByStatus.active);
+        response->success = false;
+        response->message = "Another action request is running!";
+    }
 }
 
 void RobotSerial::packet_callback()
@@ -257,13 +351,13 @@ void RobotSerial::packet_callback()
             RCLCPP_DEBUG(this->get_logger(), "Data available! %ld",
                          available_data);
             packet_size_ = 0;
-            memset(buffer_, 0xFF, MAX_PACKET_SIZE);
+            memset(buffer_, 0xFF, sizeof(buffer_));
         }
 
+        size_t requestedBytes = std::min(serial_port_->available(),
+                                         MAX_PACKET_SIZE - current_buffer_pos_);
         size_t aux =
-            serial_port_->read(&buffer_[current_buffer_pos_],
-                               std::min(serial_port_->available(),
-                                        MAX_PACKET_SIZE - current_buffer_pos_));
+            serial_port_->read(&buffer_[current_buffer_pos_], requestedBytes);
 
         if (current_buffer_pos_ == 0)
         {
@@ -317,6 +411,8 @@ void RobotSerial::command_callback()
             ament_index_cpp::get_package_share_directory("robot_comm_serial"));
     }
 
+    manage_robot_actions();
+
     if (!connected_)
     {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
@@ -335,9 +431,19 @@ void RobotSerial::command_callback()
         velocity->set_angular(0);
     }
 
-    bool ok = false;
-    size_t message_sz = 0;
+    if (last_message_.has_sync())
+    {
+        TimeSync* sync = last_command_.mutable_sync();
+        sync->set_t_mcu_send(last_message_.sync().t_mcu_send());
+        sync->set_t_ros_recv(last_message_.sync().t_ros_recv());
+        sync->set_t_ros_send(this->get_clock()->now().nanoseconds());
+        sync->set_t_mcu_recv(0);
 
+        last_message_.clear_sync();
+    }
+
+    size_t message_sz = 0;
+    bool ok = false;
     try
     {
         ok = last_command_.SerializeToArray(encoded_packet_, MAX_PACKET_SIZE);
@@ -394,11 +500,26 @@ void RobotSerial::clear_command()
     if (last_command_.has_actions())
     {
         last_command_.clear_actions();
+        if (last_command_.has_state())
+        {
+            last_command_.clear_state();
+        }
     }
 
     if (last_command_.has_config())
     {
         last_command_.clear_config();
+    }
+
+    if (last_command_.has_sync())
+    {
+        RCLCPP_DEBUG(
+            this->get_logger(),
+            "Sync Sent: MCU Send %ld us, ROS Recv %ld ns, ROS Send %ld ns",
+            last_command_.sync().t_mcu_send(),
+            last_command_.sync().t_ros_recv(),
+            last_command_.sync().t_ros_send());
+        last_command_.clear_sync();
     }
 }
 
@@ -423,6 +544,7 @@ void RobotSerial::connect()
 
 void RobotSerial::decode_buffer()
 {
+    rclcpp::Time decode_time = this->get_clock()->now();
     int end_byte_count = 0, packet_count = 0;
     size_t packet_start = 0, packet_sz = 0;
     std::vector<size_t> end_pos;
@@ -449,19 +571,20 @@ void RobotSerial::decode_buffer()
 
     while (end_byte_count > 0)
     {
-        memset(decoded_packet_, 0x00, MAX_PACKET_SIZE);
+        memset(decoded_packet_, 0x00, sizeof(decoded_packet_));
         packet_sz = end_pos.at(packet_count) - packet_start;
 
         cobs_decode_result decode_result =
-            cobs_decode(decoded_packet_, MAX_PACKET_SIZE,
+            cobs_decode(decoded_packet_, sizeof(decoded_packet_),
                         &buffer_[packet_start], packet_sz);
 
         if (decode_result.status != COBS_DECODE_OK)
         {
             RCLCPP_ERROR(
-                this->get_logger(), "Failed to decode COBS packet: %d. %s",
+                this->get_logger(),
+                "Failed to decode COBS packet! Error Code:%d. %s",
                 decode_result.status,
-                packet_to_str(&buffer_[packet_start], packet_sz).c_str());
+                packet_to_str(&buffer_[packet_start], packet_sz + 10).c_str());
         }
         else if (decode_result.out_len == 0)
         {
@@ -479,7 +602,8 @@ void RobotSerial::decode_buffer()
             CRC_t crc_check = crcFast(decoded_packet_, decode_result.out_len);
             if (crc_check != CRC_OK)
             {
-                RCLCPP_ERROR(this->get_logger(), "Invalid CRC Value");
+                RCLCPP_ERROR(this->get_logger(), "Invalid CRC Value! %d != %d",
+                             crc_check, CRC_OK);
             }
             else
             {
@@ -506,6 +630,28 @@ void RobotSerial::decode_buffer()
                                  message.DebugString().c_str());
 
                     last_message_ = message;
+
+                    if (last_message_.has_sync())
+                    {
+                        last_message_.mutable_sync()->set_t_ros_recv(
+                            this->get_clock()->now().nanoseconds());
+
+                        RCLCPP_DEBUG(
+                            this->get_logger(),
+                            "Sync Received: MCU Send %ld us, ROS Recv %ld ns",
+                            last_message_.sync().t_mcu_send(),
+                            last_message_.sync().t_ros_recv());
+                    }
+
+                    last_message_timestamp_ = this->get_clock()->now();
+
+                    // RCLCPP_INFO_THROTTLE(
+                    //     this->get_logger(), *this->get_clock(), 1000,
+                    //     "Decode: %.3f ms | Transfer: %.3f ms",
+                    //     (this->get_clock()->now() -
+                    //     decode_time).nanoseconds() /
+                    //         1e6,
+                    //     decode_result.out_len * 1000.f * 10.f / 2000000.f);
                     last_message_ok_ = true;
                 }
                 else
@@ -516,6 +662,7 @@ void RobotSerial::decode_buffer()
             }
         }
 
+        memset(&buffer_[packet_start], 0xFF, packet_sz);
         packet_start = end_pos.at(packet_count) + 1;
         packet_count++;
         end_byte_count--;
@@ -575,6 +722,76 @@ std::string RobotSerial::packet_to_str(uint8_t const* _buffer, size_t _buffLen)
     return aux.str();
 }
 
+void RobotSerial::manage_robot_actions()
+{
+    RobotActionStatus* currentAction = nullptr;
+    if (jumpToBootStatus.active)
+    {
+        currentAction = &jumpToBootStatus;
+    }
+    if (enterStandByStatus.active)
+    {
+        currentAction = &enterStandByStatus;
+    }
+    if (emergencyStopStatus.active)
+    {
+        currentAction = &emergencyStopStatus;
+    }
+
+    if (currentAction == nullptr)
+    {
+        return;
+    }
+
+    uint8_t maxRetries = 20;
+
+    if (timeSince<milliseconds>(currentAction->sentTimestamp) > 1000 &&
+        not currentAction->confirmed)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        if (jumpToBootStatus.active)
+        {
+            action->set_jump_to_boot(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action JumpToBoot expired without "
+                        "confirmation, send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+        if (enterStandByStatus.active)
+        {
+            action->set_enter_stand_by(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action EnterStandBy expired without confirmation, "
+                        "send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+        if (emergencyStopStatus.active)
+        {
+            action->set_emergency_stop(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action EmergencyStop expired without confirmation, "
+                        "send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+        currentAction->sentTimestamp = high_resolution_clock::now();
+        currentAction->sent++;
+
+        if (currentAction->sent > maxRetries)
+        {
+            RCLCPP_ERROR(
+                this->get_logger(),
+                "Aborting current action, maximum number of retries reached!");
+            jumpToBootStatus.active = false;
+            enterStandByStatus.active = false;
+            emergencyStopStatus.active = false;
+
+            jumpToBootStatus.confirmed = true;
+            enterStandByStatus.confirmed = true;
+            emergencyStopStatus.confirmed = true;
+        }
+    }
+}
+
 void RobotSerial::publish_data()
 {
     if (!last_message_ok_)
@@ -591,6 +808,7 @@ void RobotSerial::publish_data()
     publish_rtos_info();
     publish_base_params();
     publish_power_status();
+    publish_stand_by_status();
     publish_battery();
     publish_robot_config();
 
@@ -598,6 +816,14 @@ void RobotSerial::publish_data()
     {
         RCLCPP_INFO(this->get_logger(), "Last Command ok: %d",
                     last_message_.last_command_ok());
+
+        jumpToBootStatus.active = false;
+        enterStandByStatus.active = false;
+        emergencyStopStatus.active = false;
+
+        jumpToBootStatus.confirmed = true;
+        enterStandByStatus.confirmed = true;
+        emergencyStopStatus.confirmed = true;
     }
 
     last_message_ok_ = false;
@@ -607,15 +833,29 @@ void RobotSerial::publish_flags()
 {
     sd_msgs::msg::RobotFlags msg;
     msg.emergency_button_status = last_message_.emergency_button_pressed();
+
     msg.colision_detected = last_message_.colision_detected();
-    msg.motion_detection = last_message_.motion_detection();
+    msg.motion_detection = last_message_.imu().linear_motion_detected();
+    msg.angular_motion_detection =
+        last_message_.imu().angular_motion_detected();
+
+    msg.stand_by_requested = last_message_.stand_by().stand_by_request();
+    msg.stand_by_confirmed = last_message_.stand_by().stand_by_confirm();
     robot_flags_pub_->publish(msg);
 }
 
 void RobotSerial::publish_imu()
 {
     sensor_msgs::msg::Imu msg;
-    msg.header.stamp = this->get_clock()->now();
+    sensor_msgs::msg::Temperature temp_msg;
+
+    // IMU sendo calibrada
+    if (last_message_.imu().timestamp() == 0)
+    {
+        return;
+    }
+
+    msg.header.stamp = rclcpp::Time(last_message_.imu().timestamp());
     msg.header.frame_id = "imu";
 
     msg.linear_acceleration.x = last_message_.imu().acc().x() / 1000.f;
@@ -626,18 +866,39 @@ void RobotSerial::publish_imu()
     // 0 1 2
     // 3 4 5
     // 6 7 8
-    msg.linear_acceleration_covariance[0] = 1.0;
-    msg.linear_acceleration_covariance[4] = 1.0;
-    msg.linear_acceleration_covariance[8] = 1.0;
+    const auto& imu_lin_cov_proto =
+        last_message_.imu().linear_acc_covariances();
+    if (imu_lin_cov_proto.size() == 9)
+    {
+        std::copy(imu_lin_cov_proto.begin(), imu_lin_cov_proto.end(),
+                  msg.linear_acceleration_covariance.begin());
+    }
 
     msg.angular_velocity.x = last_message_.imu().gyro().x() / 1000.f;
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
+
+    if (not cLogger.isFull())
+    {
+        cLogger.addData(this->get_clock()->now().nanoseconds(),
+                        last_command_.velocities().angular() / 1000.f,
+                        msg.angular_velocity.z);
+    }
+    else if (not cLogger.isSaved())
+    {
+        cLogger.saveFile();
+        RCLCPP_INFO(this->get_logger(), "[CONTROL] Step data saved!");
+    }
+
     std::fill(msg.angular_velocity_covariance.begin(),
               msg.angular_velocity_covariance.end(), 0.0);
-    msg.angular_velocity_covariance[0] = 1e-3;
-    msg.angular_velocity_covariance[4] = 1e-3;
-    msg.angular_velocity_covariance[8] = 1e-3;
+    const auto& imu_ang_cov_proto =
+        last_message_.imu().angular_vel_covariances();
+    if (imu_ang_cov_proto.size() == 9)
+    {
+        std::copy(imu_ang_cov_proto.begin(), imu_ang_cov_proto.end(),
+                  msg.angular_velocity_covariance.begin());
+    }
 
     tf2::Quaternion q;
     q.setRPY(last_message_.imu().angle().roll(),
@@ -653,15 +914,12 @@ void RobotSerial::publish_imu()
     msg.orientation_covariance[4] = 1e-3;
     msg.orientation_covariance[8] = 1e-3;
 
-    // RCLCPP_INFO_THROTTLE(
-    //     this->get_logger(), *this->get_clock(), 100,
-    //     "Robot Feedback IMU| aX: %d | aY: %d | vW: %d | T: %.2f | t: %ld",
-    //     last_message_.imu().acc().x(),
-    //     last_message_.imu().acc().y(),
-    //     last_message_.imu().gyro().z(),
-    //     last_message_.imu().temperature(),
-    //     last_message_.imu().timestamp());
+    temp_msg.header.stamp = this->get_clock()->now();
+    temp_msg.header.frame_id = "imu";
+    temp_msg.temperature = last_message_.imu().temperature();
+    temp_msg.variance = 0;
 
+    imu_temperature_pub_->publish(temp_msg);
     imu_pub_->publish(msg);
 }
 
@@ -1194,6 +1452,11 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
         }
         RCLCPP_INFO(this->get_logger(), "Test Navigation: %s", button.c_str());
     }
+    else if (type == "mute_sounds")
+    {
+        mute = data.at("enabled");
+        RCLCPP_INFO(this->get_logger(), "Mute Sounds: %d", mute);
+    }
 }
 
 void RobotSerial::update_ecu_info(
@@ -1343,7 +1606,7 @@ void RobotSerial::publish_full_status()
             dt = this->get_clock()->now().seconds();
 
             size_t index = std::rand() % (music_files.size());
-            int ok = playSound(music_files.at(index).c_str());
+            playSound(music_files.at(index).c_str());
         }
     }
 
@@ -1376,7 +1639,8 @@ void RobotSerial::publish_full_status()
 
     status["pose"] = {{"x", last_message_.pose().x_mm() / 1000.0},
                       {"y", last_message_.pose().y_mm() / 1000.0},
-                      {"theta", last_message_.pose().yaw_trad() / 1000.0}};
+                      {"theta", last_message_.imu().angle().yaw()}};
+    // {"theta", last_message_.pose().yaw_trad() / 1000.0}};
 
     status["encoders"] = {
         {"left_pulses", last_message_.encoder().left_pos()},
@@ -1429,6 +1693,35 @@ void RobotSerial::publish_power_status()
     msg.internal_temp.header.frame_id = "mcu";
 
     power_status_pub_->publish(msg);
+}
+
+void RobotSerial::publish_stand_by_status()
+{
+    sd_msgs::msg::PowerOnTime onTimeMsg;
+    onTimeMsg.hour = last_message_.stand_by().wake_up().hour();
+    onTimeMsg.minutes = last_message_.stand_by().wake_up().minutes();
+    onTimeMsg.sunday = last_message_.stand_by().wake_up().has_sunday()
+                           ? last_message_.stand_by().wake_up().sunday()
+                           : false;
+    onTimeMsg.monday = last_message_.stand_by().wake_up().has_monday()
+                           ? last_message_.stand_by().wake_up().monday()
+                           : false;
+    onTimeMsg.tuesday = last_message_.stand_by().wake_up().has_tuesday()
+                            ? last_message_.stand_by().wake_up().tuesday()
+                            : false;
+    onTimeMsg.wednesday = last_message_.stand_by().wake_up().has_wednesday()
+                              ? last_message_.stand_by().wake_up().wednesday()
+                              : false;
+    onTimeMsg.thursday = last_message_.stand_by().wake_up().has_thursday()
+                             ? last_message_.stand_by().wake_up().thursday()
+                             : false;
+    onTimeMsg.friday = last_message_.stand_by().wake_up().has_friday()
+                           ? last_message_.stand_by().wake_up().friday()
+                           : false;
+    onTimeMsg.saturday = last_message_.stand_by().wake_up().has_saturday()
+                             ? last_message_.stand_by().wake_up().saturday()
+                             : false;
+    power_on_time_pub_->publish(onTimeMsg);
 }
 
 int main(int argc, char* argv[])

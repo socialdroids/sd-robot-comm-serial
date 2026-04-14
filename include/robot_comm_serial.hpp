@@ -5,6 +5,7 @@
 #include <deque>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/service.hpp>
 #include <serial/serial.h>
 #include <string.h>
 
@@ -17,17 +18,18 @@
 #include "sensor_msgs/msg/battery_state.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
-#include "std_msgs/msg/int32_multi_array.hpp"
+#include "std_srvs/srv/set_bool.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
-#include "websocket_interface.hpp"
 #include "navigation_tester.hpp"
+#include "websocket_interface.hpp"
 
 #include "cobs.h"
 #include "command.pb.h"
 #include "feedback.pb.h"
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
-#include <yaml-cpp/yaml.h>
+#include "control_logger.hpp"
 
 // Para ler a pose do robô
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -47,6 +49,7 @@
 #include "sd_msgs/msg/robot_encoders.hpp"
 #include "sd_msgs/msg/robot_flags.hpp"
 #include "sd_msgs/msg/robot_parameters.hpp"
+#include "sd_msgs/msg/power_on_time.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -87,13 +90,19 @@ public:
 
 private:
     static constexpr char PACKET_END[] = {"\0"};
-    static constexpr size_t MAX_PACKET_SIZE{2048};
+    static constexpr size_t MAX_PACKET_SIZE = {
+        4220}; /** Tamanho máximo de um pacote enviado ou recebido. Valor
+definido com base no
+COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
+*/
     static constexpr int8_t WIDTH = (8 * sizeof(CRC_t));
     static constexpr int16_t TOPBIT = (1 << (WIDTH - 1));
     static constexpr int8_t POLYNOMIAL = 0x07;
 
     rclcpp::Publisher<sd_msgs::msg::RobotFlags>::SharedPtr robot_flags_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::Temperature>::SharedPtr
+        imu_temperature_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
     rclcpp::Publisher<sd_msgs::msg::RobotEncoders>::SharedPtr encoder_pub_;
     rclcpp::Publisher<sd_msgs::msg::RobotBumpers>::SharedPtr bumpers_pub_;
@@ -101,10 +110,14 @@ private:
     rclcpp::Publisher<sd_msgs::msg::BaseParams>::SharedPtr base_params_pub_;
 
     rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
+    rclcpp::Publisher<sd_msgs::msg::PowerOnTime>::SharedPtr power_on_time_pub_;
     rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
 
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
+
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enter_standby_srv_;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr emg_stop_srv_;
 
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
@@ -116,12 +129,14 @@ private:
     std::unique_ptr<NavigationTester> nav_tester_;
 
     size_t packet_size_;
-    uint8_t buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
+    uint8_t
+        buffer_[MAX_PACKET_SIZE]; /**< COBS encoded packet buffer [input]. */
     size_t current_buffer_pos_;
 
-    uint8_t output_buffer_[COBS_DECODE_DST_BUF_LEN_MAX(MAX_PACKET_SIZE)];
-    uint8_t decoded_packet_[MAX_PACKET_SIZE];
-    uint8_t encoded_packet_[MAX_PACKET_SIZE];
+    uint8_t output_buffer_[MAX_PACKET_SIZE];  /**< COBS encoded packet buffer
+                                                 [output]. */
+    uint8_t decoded_packet_[MAX_PACKET_SIZE]; /**< COBS decoded packet. */
+    uint8_t encoded_packet_[MAX_PACKET_SIZE]; /**< Protobuf encoded packet. */
     static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
     std::deque<float> packet_frequency_;
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
@@ -129,6 +144,7 @@ private:
     std::chrono::time_point<high_resolution_clock> last_virtual_cmd_time_;
 
     FeedbackMessage last_message_;
+    rclcpp::Time last_message_timestamp_;
     RobotParameters last_params_;
     CommandMessage last_command_;
     bool last_message_ok_;
@@ -145,8 +161,24 @@ private:
 
     size_t MAX_RTOS_TASKS;
 
+    struct RobotActionStatus {
+        bool active;
+        uint8_t sent;
+        std::chrono::time_point<high_resolution_clock> sentTimestamp;
+        bool confirmed;
+        bool data;
+    } jumpToBootStatus, enterStandByStatus, emergencyStopStatus;
+
+    ControlLogger cLogger;
+
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
+    void enter_standby_srv_callback(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+    void emergency_stop_srv_callback(
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response);
     void packet_callback();
     void reconnect_callback();
     void command_callback();
@@ -160,9 +192,11 @@ private:
     void update_packet_frequency();
     float packet_frequency();
     std::string packet_to_str(uint8_t const* _buffer, size_t _buffLen);
+    void manage_robot_actions();
 
     void publish_data();
     void publish_power_status();
+    void publish_stand_by_status();
 
     void publish_flags();
     void publish_imu();
@@ -235,24 +269,6 @@ private:
             connected_ = false;
         }
     }
-
-    template <typename T>
-    T yaml_get_value(const YAML::Node& node, const std::string& key)
-    {
-        try
-        {
-            return node[key].as<T>();
-        }
-        catch (YAML::Exception& e)
-        {
-            std::stringstream ss;
-            ss << "Failed to parse YAML tag '" << key
-               << "' for reason: " << e.msg;
-            throw YAML::Exception(e.mark, ss.str());
-        }
-    }
-    // auto image_file_name = yaml_get_value<std::string>(doc, "image");
-    // load_parameters.resolution = yaml_get_value<double>(doc, "resolution");
 };
 
 #endif // INCLUDE_INCLUDE_ROBOT_COMM_SERIAL_HPP_

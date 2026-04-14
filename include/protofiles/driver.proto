@@ -32,23 +32,37 @@ message OTAFeedback
   string driver_ip = 2 [(nanopb).max_size = 20];
 }
 
+message MotorCommand { 
+  float velocity = 1;
+  float angle = 2;
+}
+
 message DriverCommand
 {
   int64 count = 1;
   bool enable = 2;
-  float velocity = 3;
-  float angle = 4;
-  CommandType type = 5;
-  optional OTAUpdate ota_update = 6;
+  CommandType type = 3;
+  optional OTAUpdate ota_update = 4;
+
+  optional MotorCommand left = 5;
+  optional MotorCommand right = 6;
+  optional MotorCommand single = 7;
+}
+
+message MotorStatus {
+  float velocity = 1;
+  float position = 2;
+  float current = 3;
 }
 
 message DriverFeedback
 {
   int64 count = 1;
-  float velocity = 2;
-  float position = 3;
-  float current = 4;
-  int64 timestamp = 5;
-  bool enabled = 6;
-  optional OTAFeedback ota_feedback = 7;
+  int64 timestamp = 2;
+  bool enabled = 3;
+  optional OTAFeedback ota_feedback = 4;
+
+  optional MotorStatus left = 5;
+  optional MotorStatus right = 6;
+  optional MotorStatus single = 7;
 }

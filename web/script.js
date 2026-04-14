@@ -113,10 +113,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Rola para o final (apenas se o usuário já não estiver rolando para cima)
         // (Uma pequena melhoria de usabilidade)
-        // const isScrolledToBottom = logContainer.scrollHeight - logContainer.clientHeight <= logContainer.scrollTop + 10;
-        // if (isScrolledToBottom) {
+        const isScrolledToBottom = logContainer.scrollHeight - logContainer.clientHeight <= logContainer.scrollTop + 600;
+        if (isScrolledToBottom) {
         logContainer.scrollTop = logContainer.scrollHeight;
-        // }
+        }
     }
 
     // --- Roteador de Mensagens ---
@@ -502,8 +502,6 @@ Recuperações:       ${info.recoveries   || '0'}`;
         document.getElementById('pose-val-theta').textContent = pose.theta.toFixed(3);
         
         drawPose();
-
-        drawPose();
     }
 
     function drawPose() {
@@ -702,6 +700,16 @@ Recuperações:       ${info.recoveries   || '0'}`;
             };
             ws.send(JSON.stringify(payload));
             addLog(`Modo Malha Aberta: ${e.target.checked ? 'HABILITADO' : 'DESABILITADO'}`);
+        });
+
+        // Silenciar Sons
+        document.getElementById("mute-sounds-check").addEventListener("change", (e) => {
+            const payload = {
+                type: "mute_sounds",
+                enabled: e.target.checked
+            };
+            ws.send(JSON.stringify(payload));
+            addLog(`Silenciar Sons: ${e.target.checked ? 'HABILITADO' : 'DESABILITADO'}`);
         });
 
         // Kalman

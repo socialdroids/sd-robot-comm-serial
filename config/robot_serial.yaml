@@ -1,15 +1,17 @@
 # Serial port configuration
-serial_port: "/dev/robot_ecu"
-baud_rate: 1000000
+robot_comm_serial:
+  ros__parameters:
+    serial_port: "/dev/robot_ecu"
+    baud_rate: 2000000
 
-# Timer configuration
-reception_frequency: 500 # [Hz]
-reconnection_frequency: 1 # [Hz]
-command_frequency: 100 # [Hz]
+    # Timer configuration
+    reception_frequency: 500 # [Hz]
+    reconnection_frequency: 1 # [Hz]
+    command_frequency: 100 # [Hz]
 
-# Custom function
-fake_charging: False
-fake_charging_radius: 0.5 # [m]
+    # Custom function
+    fake_charging: False
+    fake_charging_radius: 0.5 # [m]
 
-# Quantidade máxima de tasks para exibir na GUI
-max_rtos_tasks: 10
+    # Quantidade máxima de tasks para exibir na GUI
+    max_rtos_tasks: 10

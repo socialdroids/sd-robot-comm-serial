@@ -100,18 +100,9 @@ void WebsocketInterface::on_message(connection_hdl hdl,
 
         if (type == "set_pid")
         {
-            // Este callback agora precisa saber o "target"
-            // Vamos modificar a assinatura do callback ou passar o JSON inteiro
-
-            // Abordagem 1: Modificar o callback (Requer mudança no .hpp)
-            // m_pid_callback(data.at("target"), data.at("p"), data.at("i"),
-            // data.at("d"));
-
-            // Abordagem 2: Usar um callback genérico (m_command_callback)
-            // (Esta é a abordagem mais flexível que implementamos na R1)
             if (m_command_callback)
             {
-                m_command_callback(type, data); // Passa o JSON inteiro
+                m_command_callback(type, data);
             }
             else
             {
@@ -155,9 +146,11 @@ void WebsocketInterface::on_message(connection_hdl hdl,
             if (m_command_callback)
                 m_command_callback(type, data);
         }
-
-        // ... (outros 'else if' que você possa ter) ...
-
+        else if (type == "mute_sounds")
+        {
+            if (m_command_callback)
+                m_command_callback(type, data);
+        }
         else
         {
             std::cerr << "[WebsocketInterface] Tipo de mensagem desconhecido: "

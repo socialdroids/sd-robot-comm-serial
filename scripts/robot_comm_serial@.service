@@ -1,0 +1,18 @@
+[Unit]
+Description=ROS 2 Robot Comm Serial Launch Service
+After=network.target network-online.target
+
+[Service]
+Type=simple
+User=%i 
+WorkingDirectory=/home/%i/ws_socialdroids
+ExecStart=/usr/bin/bash /usr/local/bin/run_as_service.sh
+
+# Ensure the HOME environment variable is set correctly
+Environment="HOME=/home/%i" 
+Restart=always
+RestartSec=1s
+ExecReload=/bin/kill -SIGHUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target

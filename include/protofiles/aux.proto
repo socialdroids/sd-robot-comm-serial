@@ -73,3 +73,10 @@ message RobotHardware
   string driver_version = 3 [(nanopb).max_size = 10];
   string motor_version = 4 [(nanopb).max_size = 10];
 }
+
+message TimeSync {
+  uint64 t_mcu_send = 1; /**< ECU timestamp raw de envio em [us] */ 
+  uint64 t_ros_recv = 2; /**< ROS timestamp de recebimento em [ns] */ 
+  uint64 t_ros_send = 3; /**< ROS timestamp de envio em [ns] */
+  uint64 t_mcu_recv = 4; /**< ECU timestamp raw de recebimento em [us] */
+}

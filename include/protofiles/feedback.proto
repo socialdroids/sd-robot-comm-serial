@@ -2,12 +2,183 @@ syntax = "proto3";
 import "aux.proto";
 import "nanopb.proto";
 
-message PIDConfig
-{
+message PIDConfig {
   float k_p = 1;
   float k_i = 2;
   float k_d = 3;
   bool enabled = 4;
+}
+
+message IMUConfig {
+  GyroscopeConfig gyro_cfg = 1;
+  AccelerometerConfig acc_cfg = 2;
+}
+
+enum GyroFullScale {
+  GYRO_FULL_SCALE_UNSPECIFIED = 0;
+  GYRO_FULL_SCALE_2000_DPS = 1;
+  GYRO_FULL_SCALE_1000_DPS = 2;
+  GYRO_FULL_SCALE_500_DPS = 3;
+  GYRO_FULL_SCALE_250_DPS = 4;
+  GYRO_FULL_SCALE_125_DPS = 5;
+  GYRO_FULL_SCALE_62_5_DPS = 6;
+  GYRO_FULL_SCALE_31_25_DPS = 7;
+  GYRO_FULL_SCALE_15_625_DPS = 8;
+};
+
+enum AccFullScale {
+  ACC_FULL_SCALE_UNSPECIFIED = 0;
+  ACC_FULL_SCALE_16_G = 1;
+  ACC_FULL_SCALE_8_G = 2;
+  ACC_FULL_SCALE_4_G = 3;
+  ACC_FULL_SCALE_2_G = 4;
+};
+
+enum ImuOdr {
+  IMU_ODR_UNSPECIFIED = 0;
+  IMU_ODR_32K_LN = 1;
+  IMU_ODR_16K_LN = 2;
+  IMU_ODR_8K_LN = 3;
+  IMU_ODR_4K_LN = 4;
+  IMU_ODR_2K_LN = 5;
+  IMU_ODR_1K_LN = 6;
+  IMU_ODR_200 = 7;
+  IMU_ODR_100 = 8;
+  IMU_ODR_50 = 9;
+  IMU_ODR_25 = 10;
+  IMU_ODR_12_5 = 11;
+  IMU_ODR_6_25_LP_ACC_ONLY = 12;
+  IMU_ODR_3_125_LP_ACC_ONLY = 13;
+  IMU_ODR_1_5625_LP_ACC_ONLY = 14;
+  IMU_ODR_500 = 15;
+}
+
+enum GyroNotchBandwidth {
+  GYRO_NOTCH_BANDWIDTH_UNSPECIFIED = 0;
+  GYRO_NOTCH_BANDWIDTH_1449_HZ = 1;
+  GYRO_NOTCH_BANDWIDTH_680_HZ = 2;
+  GYRO_NOTCH_BANDWIDTH_329_HZ = 3;
+  GYRO_NOTCH_BANDWIDTH_162_HZ = 4;
+  GYRO_NOTCH_BANDWIDTH_80_HZ = 5;
+  GYRO_NOTCH_BANDWIDTH_40_HZ = 6;
+  GYRO_NOTCH_BANDWIDTH_20_HZ = 7;
+  GYRO_NOTCH_BANDWIDTH_10_HZ = 8;
+}
+
+enum AAFBandwidth {
+  AAF_BANDWIDTH_UNSPECIFIED = 0;
+  AAF_BANDWIDTH_42_HZ = 1;
+  AAF_BANDWIDTH_84_HZ = 2;
+  AAF_BANDWIDTH_126_HZ = 3;
+  AAF_BANDWIDTH_170_HZ = 4;
+  AAF_BANDWIDTH_213_HZ = 5;
+  AAF_BANDWIDTH_258_HZ = 6;
+  AAF_BANDWIDTH_303_HZ = 7;
+  AAF_BANDWIDTH_348_HZ = 8;
+  AAF_BANDWIDTH_394_HZ = 9;
+  AAF_BANDWIDTH_441_HZ = 10;
+  AAF_BANDWIDTH_488_HZ = 11;
+  AAF_BANDWIDTH_536_HZ = 12;
+  AAF_BANDWIDTH_585_HZ = 13;
+  AAF_BANDWIDTH_634_HZ = 14;
+  AAF_BANDWIDTH_684_HZ = 15;
+  AAF_BANDWIDTH_734_HZ = 16;
+  AAF_BANDWIDTH_785_HZ = 17;
+  AAF_BANDWIDTH_837_HZ = 18;
+  AAF_BANDWIDTH_890_HZ = 19;
+  AAF_BANDWIDTH_943_HZ = 20;
+  AAF_BANDWIDTH_997_HZ = 21;
+  AAF_BANDWIDTH_1051_HZ = 22;
+  AAF_BANDWIDTH_1107_HZ = 23;
+  AAF_BANDWIDTH_1163_HZ = 24;
+  AAF_BANDWIDTH_1220_HZ = 25;
+  AAF_BANDWIDTH_1277_HZ = 26;
+  AAF_BANDWIDTH_1336_HZ = 27;
+  AAF_BANDWIDTH_1395_HZ = 28;
+  AAF_BANDWIDTH_1454_HZ = 29;
+  AAF_BANDWIDTH_1515_HZ = 30;
+  AAF_BANDWIDTH_1577_HZ = 31;
+  AAF_BANDWIDTH_1639_HZ = 32;
+  AAF_BANDWIDTH_1702_HZ = 33;
+  AAF_BANDWIDTH_1766_HZ = 34;
+  AAF_BANDWIDTH_1830_HZ = 35;
+  AAF_BANDWIDTH_1896_HZ = 36;
+  AAF_BANDWIDTH_1962_HZ = 37;
+  AAF_BANDWIDTH_2029_HZ = 38;
+  AAF_BANDWIDTH_2097_HZ = 39;
+  AAF_BANDWIDTH_2166_HZ = 40;
+  AAF_BANDWIDTH_2235_HZ = 41;
+  AAF_BANDWIDTH_2306_HZ = 42;
+  AAF_BANDWIDTH_2377_HZ = 43;
+  AAF_BANDWIDTH_2449_HZ = 44;
+  AAF_BANDWIDTH_2522_HZ = 45;
+  AAF_BANDWIDTH_2596_HZ = 46;
+  AAF_BANDWIDTH_2671_HZ = 47;
+  AAF_BANDWIDTH_2746_HZ = 48;
+  AAF_BANDWIDTH_2823_HZ = 49;
+  AAF_BANDWIDTH_2900_HZ = 50;
+  AAF_BANDWIDTH_2978_HZ = 51;
+  AAF_BANDWIDTH_3057_HZ = 52;
+  AAF_BANDWIDTH_3137_HZ = 53;
+  AAF_BANDWIDTH_3217_HZ = 54;
+  AAF_BANDWIDTH_3299_HZ = 55;
+  AAF_BANDWIDTH_3381_HZ = 56;
+  AAF_BANDWIDTH_3464_HZ = 57;
+  AAF_BANDWIDTH_3548_HZ = 58;
+  AAF_BANDWIDTH_3633_HZ = 59;
+  AAF_BANDWIDTH_3718_HZ = 60;
+  AAF_BANDWIDTH_3805_HZ = 61;
+  AAF_BANDWIDTH_3892_HZ = 62;
+  AAF_BANDWIDTH_3979_HZ = 63;
+}
+
+//      ODR (Hz) | *_UI_FILT_BW | 3dB BW (Hz) | NBW (Hz) | Group Delay (ms)  
+// 1st  200      | 3            | 44.4        | 50.6     | 6.8              
+// 2st  200      | 3            | 47.0        | 49.1     | 8.0              
+// 3st  200      | 3            | 47.6        | 48.1     | 9.8              
+// ----------------------------------------------------------               
+// 1st  200      | 4            | 37.0        | 43.6     | 7.6              
+// 2st  200      | 4            | 37.8        | 41.2     | 9.1              
+// 3st  200      | 4            | 39.2        | 40.0     | 11.4             
+// ----------------------------------------------------------               
+// 1st  200      | 6            | 19.5        | 25.7     | 11.7
+// 2st  200      | 6            | 19.2        | 21.0     | 15.3              
+// 3st  200      | 6            | 18.7        | 19.5     | 20.4
+// ----------------------------------------------------------               
+// 1st  200      | 7            |  9.6        | 13.7     | 20.3
+// 2st  200      | 7            |  8.5        |  9.5     | 30.0              
+// 3st  200      | 7            | 10.1        | 10.6     | 35.2
+enum ImuUIFilterOrder {
+  IMU_UI_FILTER_ORDER_UNSPECIFIED = 0;
+  IMU_UI_FILTER_ORDER_1 = 1;
+  IMU_UI_FILTER_ORDER_2 = 2;
+  IMU_UI_FILTER_ORDER_3 = 3;
+}
+
+message GyroscopeConfig {
+  float dead_zone = 1;
+  float motion_threshold = 2;
+
+  GyroFullScale full_scale = 3;
+  ImuOdr odr = 4;
+  Array3D bias = 5;
+
+  optional GyroNotchBandwidth notch_bw = 6;
+  AAFBandwidth aaf_bw = 7;
+  ImuUIFilterOrder ui_order = 8;
+  float ui_filter_bw = 9;
+}
+
+message AccelerometerConfig {
+  float motion_threshold = 1;
+
+  AccFullScale full_scale = 2;
+  ImuOdr odr = 3;
+  Array3D bias = 4;
+
+  AAFBandwidth aaf_bw = 5;
+  ImuUIFilterOrder ui_order = 6;
+  float ui_filter_bw = 7;
 }
 
 message RobotParameters
@@ -18,6 +189,7 @@ message RobotParameters
   optional PIDConfig angular_pid = 4;
   optional float wheel_diameter = 5;
   optional float wheel_distance = 6;
+  optional IMUConfig imu_config = 7;
 }
 
 enum BumperID {
@@ -41,14 +213,14 @@ message Pose
   sint64 x_mm = 1;
   sint64 y_mm = 2;
   sint32 yaw_trad = 3;
-  repeated double covariance = 4 [(nanopb).max_count = 36];
+  repeated double covariances = 4 [(nanopb).max_count = 36];
 }
 
 message Velocities
 {
   sint32 linear_mm_s = 1;
   sint32 angular_trad_s = 2;
-  repeated double covariance = 3 [(nanopb).max_count = 36];
+  repeated double covariances = 3 [(nanopb).max_count = 36];
 
   sint32 left_wheel_mm_s = 4;
   sint32 right_wheel_mm_s = 5;
@@ -60,7 +232,11 @@ message IMU
   Array3D gyro = 2;
   float temperature = 3;
   Angle angle = 4;
-  sint64 timestamp = 5;
+  uint64 timestamp = 5;
+  bool linear_motion_detected = 6;
+  bool angular_motion_detected = 7;
+  repeated float angular_vel_covariances = 8 [(nanopb).max_count = 9];
+  repeated float linear_acc_covariances = 9 [(nanopb).max_count = 9];
 }
 
 message Encoder
@@ -124,16 +300,17 @@ message FeedbackMessage
 
   bool emergency_button_pressed = 6;
   bool colision_detected = 7;
-  bool motion_detection = 8;
 
-  PowerStatus power_status = 9;
-  StandBy stand_by = 10;
+  PowerStatus power_status = 8;
+  StandBy stand_by = 9;
 
-  optional RobotParameters parameters = 11;
-  optional RobotInfo info = 12;
+  optional RobotParameters parameters = 10;
+  optional RobotInfo info = 11;
 
   // true sempre que um comando opcional for recebido e foi corretamente
   // reconhecido. Comandos opcionais: RobotActions, RobotConfig, RobotState,
   // WakeUpConfig, timestamp
-  optional bool last_command_ok = 13;
+  optional bool last_command_ok = 12;
+
+  optional TimeSync sync = 13;
 }
