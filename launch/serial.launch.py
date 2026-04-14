@@ -8,6 +8,7 @@ def generate_launch_description():
             name='robot_comm_serial',
             package='robot_comm_serial',
             executable='robot_comm_serial',
+            # namespace='robot_1',
             output='screen',
             parameters=[
             PathJoinSubstitution([get_package_share_directory(

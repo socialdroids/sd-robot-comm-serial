@@ -13,7 +13,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-#include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/battery_state.hpp"
 #include "sensor_msgs/msg/imu.hpp"
@@ -113,7 +113,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Publisher<sd_msgs::msg::PowerOnTime>::SharedPtr power_on_time_pub_;
     rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
 
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
 
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enter_standby_srv_;
@@ -171,7 +171,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
 
     ControlLogger cLogger;
 
-    void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
+    void cmd_vel_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
     void enter_standby_srv_callback(
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,

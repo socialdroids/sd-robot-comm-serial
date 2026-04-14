@@ -142,7 +142,7 @@ RobotSerial::RobotSerial()
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
         "robot_base/battery", best_effort_qos);
 
-    cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+    cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
         "cmd_vel", best_effort_qos, // QoS History Depth
         std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
 
@@ -229,11 +229,11 @@ RobotSerial::~RobotSerial()
 }
 
 void RobotSerial::cmd_vel_callback(
-    const geometry_msgs::msg::Twist::SharedPtr msg)
+    const geometry_msgs::msg::TwistStamped::SharedPtr msg)
 {
     VelocityCommand* velocity = last_command_.mutable_velocities();
-    velocity->set_linear(msg->linear.x * 1000);
-    velocity->set_angular(msg->angular.z * 1000);
+    velocity->set_linear(msg->twist.linear.x * 1000);
+    velocity->set_angular(msg->twist.angular.z * 1000);
     last_cmd_vel_time_ = high_resolution_clock::now();
 }
 
