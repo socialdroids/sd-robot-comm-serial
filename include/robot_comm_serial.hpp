@@ -44,13 +44,13 @@
 #include "sd_msgs/msg/encoder.hpp"
 #include "sd_msgs/msg/encoder_status.hpp"
 #include "sd_msgs/msg/pid_config.hpp"
+#include "sd_msgs/msg/power_on_time.hpp"
 #include "sd_msgs/msg/power_status.hpp"
 #include "sd_msgs/msg/robot_bumpers.hpp"
 #include "sd_msgs/msg/robot_debug.hpp"
 #include "sd_msgs/msg/robot_encoders.hpp"
 #include "sd_msgs/msg/robot_flags.hpp"
 #include "sd_msgs/msg/robot_parameters.hpp"
-#include "sd_msgs/msg/power_on_time.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -114,12 +114,14 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Publisher<sd_msgs::msg::PowerOnTime>::SharedPtr power_on_time_pub_;
     rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
 
-    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_stamped_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr
+        cmd_vel_stamped_sub_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
 
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enter_standby_srv_;
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr emg_stop_srv_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_ecu_srv_;
 
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
@@ -163,17 +165,19 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
 
     size_t MAX_RTOS_TASKS;
 
-    struct RobotActionStatus {
+    struct RobotActionStatus
+    {
         bool active;
         uint8_t sent;
         std::chrono::time_point<high_resolution_clock> sentTimestamp;
         bool confirmed;
         bool data;
-    } jumpToBootStatus, enterStandByStatus, emergencyStopStatus;
+    } jumpToBootStatus, enterStandByStatus, emergencyStopStatus, rebootStatus;
 
     ControlLogger cLogger;
 
-    void cmd_vel_stamped_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
+    void cmd_vel_stamped_callback(
+        const geometry_msgs::msg::TwistStamped::SharedPtr msg);
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
 
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
@@ -183,6 +187,9 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     void emergency_stop_srv_callback(
         const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
         std::shared_ptr<std_srvs::srv::SetBool::Response> response);
+    void reboot_ecu_srv_callback(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response);
     void packet_callback();
     void reconnect_callback();
     void command_callback();
@@ -248,29 +255,48 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
             .count();
     }
 
-    template <typename Func> void try_serial_operation(Func&& func)
+    template <typename Func>
+    void try_serial_operation(Func&& func, bool& show_once)
     {
+        bool prev_conn = connected_;
         try
         {
             func();
         }
         catch (serial::PortNotOpenedException& e)
         {
-            RCLCPP_ERROR(this->get_logger(),
-                         "Serial Operation Failed! Reason: %s.", e.what());
+            if (!show_once)
+            {
+                RCLCPP_ERROR(this->get_logger(),
+                             "Serial Operation Failed! Reason: %s.", e.what());
+                show_once = true;
+            }
             connected_ = false;
         }
         catch (serial::SerialException& e)
         {
-            RCLCPP_ERROR(this->get_logger(),
-                         "Serial Operation Failed! Reason: %s.", e.what());
+            if (!show_once)
+            {
+                show_once = true;
+                RCLCPP_ERROR(this->get_logger(),
+                             "Serial Operation Failed! Reason: %s.", e.what());
+            }
             connected_ = false;
         }
         catch (serial::IOException& e)
         {
-            RCLCPP_ERROR(this->get_logger(),
-                         "Serial Operation Failed! Reason: %s.", e.what());
+            if (!show_once)
+            {
+                show_once = true;
+                RCLCPP_ERROR(this->get_logger(),
+                             "Serial Operation Failed! Reason: %s.", e.what());
+            }
             connected_ = false;
+        }
+
+        if (connected_ != prev_conn)
+        {
+            RCLCPP_WARN(this->get_logger(), "Serial port disconnected!");
         }
     }
 };

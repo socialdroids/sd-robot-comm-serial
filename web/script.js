@@ -668,6 +668,19 @@ Recuperações:       ${info.recoveries   || '0'}`;
             addLog(`Enviando Nav-${target}`);
         });
 
+        document.getElementById("command-form").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const target = e.submitter.dataset.target;
+            if (!target) return;
+
+            const payload = {
+                type: "commands",
+                command: target
+            }
+            ws.send(JSON.stringify(payload));
+            addLog(`Enviando Command: ${target}`);
+        });
+
         document.getElementById("record-poses-check").addEventListener('change', (e) => {
 
             const payload = {

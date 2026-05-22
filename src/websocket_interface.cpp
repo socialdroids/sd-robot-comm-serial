@@ -151,6 +151,11 @@ void WebsocketInterface::on_message(connection_hdl hdl,
             if (m_command_callback)
                 m_command_callback(type, data);
         }
+        else if (type == "commands")
+        {
+            if (m_command_callback)
+                m_command_callback(type, data);
+        }
         else
         {
             std::cerr << "[WebsocketInterface] Tipo de mensagem desconhecido: "

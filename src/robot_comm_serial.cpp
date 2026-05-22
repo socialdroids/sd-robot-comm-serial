@@ -97,8 +97,7 @@ RobotSerial::RobotSerial()
 
     fake_charging_fail_count_ = 0;
 
-    MAX_RTOS_TASKS =
-        this->declare_parameter<int>("max_rtos_tasks", 10);
+    MAX_RTOS_TASKS = this->declare_parameter<int>("max_rtos_tasks", 10);
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
@@ -145,17 +144,19 @@ RobotSerial::RobotSerial()
 
     if (cmd_stamped)
     {
-        cmd_vel_stamped_sub_= this->create_subscription<geometry_msgs::msg::TwistStamped>(
-            "cmd_vel", best_effort_qos, // QoS History Depth
-            std::bind(&RobotSerial::cmd_vel_stamped_callback, this, std::placeholders::_1));
+        cmd_vel_stamped_sub_ =
+            this->create_subscription<geometry_msgs::msg::TwistStamped>(
+                "cmd_vel", best_effort_qos, // QoS History Depth
+                std::bind(&RobotSerial::cmd_vel_stamped_callback, this,
+                          std::placeholders::_1));
     }
     else
     {
         cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-                "cmd_vel", best_effort_qos, // QoS History Depth
-                std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
+            "cmd_vel", best_effort_qos, // QoS History Depth
+            std::bind(&RobotSerial::cmd_vel_callback, this,
+                      std::placeholders::_1));
     }
-
 
     jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
         "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
@@ -170,6 +171,9 @@ RobotSerial::RobotSerial()
         "emergency_stop",
         std::bind(&RobotSerial::emergency_stop_srv_callback, this,
                   std::placeholders::_1, std::placeholders::_2));
+    reboot_ecu_srv_ = this->create_service<std_srvs::srv::Trigger>(
+        "reboot_ecu", std::bind(&RobotSerial::reboot_ecu_srv_callback, this,
+                                std::placeholders::_1, std::placeholders::_2));
 
     setupAudio();
     connect();
@@ -262,7 +266,8 @@ void RobotSerial::jump_to_boot_callback(
 {
     RCLCPP_INFO(this->get_logger(), "[Robot Action] Jump to boot? %d",
                 msg->data);
-    if (not enterStandByStatus.active && not emergencyStopStatus.active)
+    if (not enterStandByStatus.active && not emergencyStopStatus.active &&
+        not rebootStatus.active)
     {
         RobotActions* action = last_command_.mutable_actions();
         action->set_jump_to_boot(msg->data);
@@ -277,8 +282,10 @@ void RobotSerial::jump_to_boot_callback(
         RCLCPP_ERROR(
             this->get_logger(),
             "[Robot Action] Failed to send JumpToBoot request! Another "
-            "action is already queued! EnterStandBy=%d, EmergencyStop=%d",
-            enterStandByStatus.active, emergencyStopStatus.active);
+            "action is already queued! EnterStandBy=%d, EmergencyStop=%d, "
+            "Reboot=%d",
+            enterStandByStatus.active, emergencyStopStatus.active,
+            rebootStatus.active);
     }
 }
 
@@ -287,7 +294,8 @@ void RobotSerial::enter_standby_srv_callback(
     std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 {
     RCLCPP_INFO(this->get_logger(), "[Robot Action] Enter Stand-By!");
-    if (not jumpToBootStatus.active && not emergencyStopStatus.active)
+    if (not jumpToBootStatus.active && not emergencyStopStatus.active &&
+        not rebootStatus.active)
     {
         RobotActions* action = last_command_.mutable_actions();
         action->set_enter_stand_by(true);
@@ -303,11 +311,12 @@ void RobotSerial::enter_standby_srv_callback(
     }
     else
     {
-        RCLCPP_ERROR(
-            this->get_logger(),
-            "[Robot Action] Failed to send Stand-By request! Another "
-            "action is already queued! JumpToBoot=%d, EmergencyStop=%d",
-            jumpToBootStatus.active, emergencyStopStatus.active);
+        RCLCPP_ERROR(this->get_logger(),
+                     "[Robot Action] Failed to send Stand-By request! Another "
+                     "action is already queued! JumpToBoot=%d, "
+                     "EmergencyStop=%d, Reboot=%d",
+                     jumpToBootStatus.active, emergencyStopStatus.active,
+                     rebootStatus.active);
         response->success = false;
         response->message = "Another action request is running!";
     }
@@ -319,7 +328,8 @@ void RobotSerial::emergency_stop_srv_callback(
 {
     RCLCPP_INFO(this->get_logger(), "[Robot Action] Emergency Stop? %d",
                 request->data);
-    if (not jumpToBootStatus.active && not enterStandByStatus.active)
+    if (not jumpToBootStatus.active && not enterStandByStatus.active &&
+        not rebootStatus.active)
     {
         RobotActions* action = last_command_.mutable_actions();
         action->set_emergency_stop(request->data);
@@ -336,8 +346,43 @@ void RobotSerial::emergency_stop_srv_callback(
         RCLCPP_ERROR(
             this->get_logger(),
             "[Robot Action] Failed to send Emergency Stop request! Another "
-            "action is already queued! JumpToBoot=%d, EnterStandBy=%d",
-            jumpToBootStatus.active, enterStandByStatus.active);
+            "action is already queued! JumpToBoot=%d, EnterStandBy=%d, "
+            "Reboot=%d",
+            jumpToBootStatus.active, enterStandByStatus.active,
+            rebootStatus.active);
+        response->success = false;
+        response->message = "Another action request is running!";
+    }
+}
+
+void RobotSerial::reboot_ecu_srv_callback(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] Reboot ECU!");
+    if (not jumpToBootStatus.active && not emergencyStopStatus.active &&
+        not enterStandByStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_reboot(true);
+        last_command_.set_state(RobotState::ROBOT_STATE_STAND_BY);
+
+        rebootStatus.active = true;
+        rebootStatus.confirmed = false;
+        rebootStatus.sent = 1;
+        rebootStatus.data = true;
+        rebootStatus.sentTimestamp = high_resolution_clock::now();
+
+        response->success = true;
+    }
+    else
+    {
+        RCLCPP_ERROR(this->get_logger(),
+                     "[Robot Action] Failed to send Reboot request! Another "
+                     "action is already queued! JumpToBoot=%d, "
+                     "EmergencyStop=%d, EnterStandBy=%d",
+                     jumpToBootStatus.active, emergencyStopStatus.active,
+                     enterStandByStatus.active);
         response->success = false;
         response->message = "Another action request is running!";
     }
@@ -351,44 +396,46 @@ void RobotSerial::packet_callback()
          t_publish = high_resolution_clock::now();
     if (!connected_)
     {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "Serial port disconnected!");
         return;
     }
 
     t_read = high_resolution_clock::now();
-    this->try_serial_operation([&]() {
-        size_t available_data = serial_port_->available();
+    bool once = false;
+    this->try_serial_operation(
+        [&]() {
+            size_t available_data = serial_port_->available();
 
-        if (available_data >= MAX_PACKET_SIZE)
-        {
-            RCLCPP_WARN(this->get_logger(),
-                        "Too much data in serial buffer (%ld > %ld)!",
-                        available_data, MAX_PACKET_SIZE);
-        }
-        if (available_data > 0 && current_buffer_pos_ == 0)
-        {
-            RCLCPP_DEBUG(this->get_logger(), "Data available! %ld",
-                         available_data);
-            packet_size_ = 0;
-            memset(buffer_, 0xFF, sizeof(buffer_));
-        }
+            if (available_data >= MAX_PACKET_SIZE)
+            {
+                RCLCPP_WARN(this->get_logger(),
+                            "Too much data in serial buffer (%ld > %ld)!",
+                            available_data, MAX_PACKET_SIZE);
+            }
+            if (available_data > 0 && current_buffer_pos_ == 0)
+            {
+                RCLCPP_DEBUG(this->get_logger(), "Data available! %ld",
+                             available_data);
+                packet_size_ = 0;
+                memset(buffer_, 0xFF, sizeof(buffer_));
+            }
 
-        size_t requestedBytes = std::min(serial_port_->available(),
-                                         MAX_PACKET_SIZE - current_buffer_pos_);
-        size_t aux =
-            serial_port_->read(&buffer_[current_buffer_pos_], requestedBytes);
+            size_t requestedBytes =
+                std::min(serial_port_->available(),
+                         MAX_PACKET_SIZE - current_buffer_pos_);
+            size_t aux = serial_port_->read(&buffer_[current_buffer_pos_],
+                                            requestedBytes);
 
-        if (current_buffer_pos_ == 0)
-        {
-            packet_size_ = aux;
-        }
-        else
-        {
-            packet_size_ += aux;
-        }
-        current_buffer_pos_ = aux;
-    });
+            if (current_buffer_pos_ == 0)
+            {
+                packet_size_ = aux;
+            }
+            else
+            {
+                packet_size_ += aux;
+            }
+            current_buffer_pos_ = aux;
+        },
+        once);
     auto dt_read = high_resolution_clock::now() - t_read;
 
     t_decode = high_resolution_clock::now();
@@ -415,7 +462,7 @@ void RobotSerial::reconnect_callback()
 {
     if (!connected_)
     {
-        RCLCPP_INFO(this->get_logger(), "Trying to reconnect...");
+        RCLCPP_DEBUG(this->get_logger(), "Trying to reconnect...");
         packet_frequency_.clear();
         last_packet_time_ = high_resolution_clock::now();
         connect();
@@ -435,8 +482,6 @@ void RobotSerial::command_callback()
 
     if (!connected_)
     {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "Serial port disconnected!");
         update_ecu_info("", "", "", "", "", "", "", "", 0, 0);
         return;
     }
@@ -489,20 +534,24 @@ void RobotSerial::command_callback()
 
         if (encode_result.status == COBS_ENCODE_OK)
         {
-            this->try_serial_operation([&]() {
-                size_t bytes_written =
-                    serial_port_->write(output_buffer_, encode_result.out_len);
+            bool once = false;
+            this->try_serial_operation(
+                [&]() {
+                    size_t bytes_written = serial_port_->write(
+                        output_buffer_, encode_result.out_len);
 
-                if (bytes_written == encode_result.out_len)
-                {
-                    RCLCPP_DEBUG(this->get_logger(), "Packet Sent!");
-                    clear_command();
-                }
-                else
-                {
-                    RCLCPP_WARN(this->get_logger(), "Failed to send packet!");
-                }
-            });
+                    if (bytes_written == encode_result.out_len)
+                    {
+                        RCLCPP_DEBUG(this->get_logger(), "Packet Sent!");
+                        clear_command();
+                    }
+                    else
+                    {
+                        RCLCPP_WARN(this->get_logger(),
+                                    "Failed to send packet!");
+                    }
+                },
+                once);
         }
         else
         {
@@ -545,13 +594,17 @@ void RobotSerial::clear_command()
 
 void RobotSerial::connect()
 {
-    try_serial_operation([&]() {
-        serial_port_ = std::make_shared<serial::Serial>(
-            port_, baud_, serial::Timeout::simpleTimeout(10));
-    });
+    static bool once = false;
+    try_serial_operation(
+        [&]() {
+            serial_port_ = std::make_shared<serial::Serial>(
+                port_, baud_, serial::Timeout::simpleTimeout(10));
+        },
+        once);
 
     if (serial_port_)
     {
+        once = false;
         serial_port_->setTimeout(10, 1, 0, 1, 0);
         connected_ = serial_port_->isOpen();
         RCLCPP_INFO(this->get_logger(),
@@ -757,6 +810,10 @@ void RobotSerial::manage_robot_actions()
     {
         currentAction = &emergencyStopStatus;
     }
+    if (rebootStatus.active)
+    {
+        currentAction = &rebootStatus;
+    }
 
     if (currentAction == nullptr)
     {
@@ -793,6 +850,15 @@ void RobotSerial::manage_robot_actions()
                         "send again (%d/%d)",
                         currentAction->sent, maxRetries);
         }
+        if (rebootStatus.active)
+        {
+            action->set_reboot(currentAction->data);
+            RCLCPP_WARN(this->get_logger(),
+                        "Action Reboot expired without confirmation, "
+                        "send again (%d/%d)",
+                        currentAction->sent, maxRetries);
+        }
+
         currentAction->sentTimestamp = high_resolution_clock::now();
         currentAction->sent++;
 
@@ -804,10 +870,12 @@ void RobotSerial::manage_robot_actions()
             jumpToBootStatus.active = false;
             enterStandByStatus.active = false;
             emergencyStopStatus.active = false;
+            rebootStatus.active = false;
 
             jumpToBootStatus.confirmed = true;
             enterStandByStatus.confirmed = true;
             emergencyStopStatus.confirmed = true;
+            rebootStatus.confirmed = true;
         }
     }
 }
@@ -840,10 +908,12 @@ void RobotSerial::publish_data()
         jumpToBootStatus.active = false;
         enterStandByStatus.active = false;
         emergencyStopStatus.active = false;
+        rebootStatus.active = false;
 
         jumpToBootStatus.confirmed = true;
         enterStandByStatus.confirmed = true;
         emergencyStopStatus.confirmed = true;
+        rebootStatus.confirmed = true;
     }
 
     last_message_ok_ = false;
@@ -1476,6 +1546,32 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     {
         mute = data.at("enabled");
         RCLCPP_INFO(this->get_logger(), "Mute Sounds: %d", mute);
+    }
+    else if (type == "commands")
+    {
+        std::string cmd = data.at("command");
+        if (cmd == "reboot_ecu")
+        {
+            auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+            auto response =
+                std::make_shared<std_srvs::srv::Trigger::Response>();
+            reboot_ecu_srv_callback(request, response);
+
+            RCLCPP_INFO(this->get_logger(),
+                        "Reboot ECU from GUI! Success %d, MSG %s",
+                        response->success, response->message.c_str());
+        }
+        if (cmd == "stand_by")
+        {
+            auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+            auto response =
+                std::make_shared<std_srvs::srv::Trigger::Response>();
+            enter_standby_srv_callback(request, response);
+
+            RCLCPP_INFO(this->get_logger(),
+                        "Enter Stand-By from GUI! Success %d, MSG %s",
+                        response->success, response->message.c_str());
+        }
     }
 }
 
