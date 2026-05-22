@@ -83,6 +83,7 @@ RobotSerial::RobotSerial()
       connected_(false)
 {
     // === CONFIGURAÇÕES
+    bool cmd_stamped = this->declare_parameter<bool>("use_cmd_stamped", false);
     port_ = this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
     baud_ = this->declare_parameter<int>("baud_rate", 1000000);
     int reception_freq =
@@ -114,7 +115,7 @@ RobotSerial::RobotSerial()
     // === TÓPICOS
     // Create a QoS profile for best effort reliability
     rclcpp::QoS best_effort_qos(10); // History depth of 10
-    best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
+    // best_effort_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
 
     robot_flags_pub_ = this->create_publisher<sd_msgs::msg::RobotFlags>(
         "robot_base/flags", best_effort_qos);
@@ -142,9 +143,19 @@ RobotSerial::RobotSerial()
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
         "robot_base/battery", best_effort_qos);
 
-    cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
-        "cmd_vel", best_effort_qos, // QoS History Depth
-        std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
+    if (cmd_stamped)
+    {
+        cmd_vel_stamped_sub_= this->create_subscription<geometry_msgs::msg::TwistStamped>(
+            "cmd_vel", best_effort_qos, // QoS History Depth
+            std::bind(&RobotSerial::cmd_vel_stamped_callback, this, std::placeholders::_1));
+    }
+    else
+    {
+        cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+                "cmd_vel", best_effort_qos, // QoS History Depth
+                std::bind(&RobotSerial::cmd_vel_callback, this, std::placeholders::_1));
+    }
+
 
     jump_to_boot_sub_ = this->create_subscription<std_msgs::msg::Bool>(
         "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
@@ -228,12 +239,21 @@ RobotSerial::~RobotSerial()
     ws_interface_->stop();
 }
 
-void RobotSerial::cmd_vel_callback(
+void RobotSerial::cmd_vel_stamped_callback(
     const geometry_msgs::msg::TwistStamped::SharedPtr msg)
 {
     VelocityCommand* velocity = last_command_.mutable_velocities();
     velocity->set_linear(msg->twist.linear.x * 1000);
     velocity->set_angular(msg->twist.angular.z * 1000);
+    last_cmd_vel_time_ = high_resolution_clock::now();
+}
+
+void RobotSerial::cmd_vel_callback(
+    const geometry_msgs::msg::Twist::SharedPtr msg)
+{
+    VelocityCommand* velocity = last_command_.mutable_velocities();
+    velocity->set_linear(msg->linear.x * 1000);
+    velocity->set_angular(msg->angular.z * 1000);
     last_cmd_vel_time_ = high_resolution_clock::now();
 }
 
@@ -580,7 +600,7 @@ void RobotSerial::decode_buffer()
 
         if (decode_result.status != COBS_DECODE_OK)
         {
-            RCLCPP_ERROR(
+            RCLCPP_DEBUG(
                 this->get_logger(),
                 "Failed to decode COBS packet! Error Code:%d. %s",
                 decode_result.status,
@@ -602,7 +622,7 @@ void RobotSerial::decode_buffer()
             CRC_t crc_check = crcFast(decoded_packet_, decode_result.out_len);
             if (crc_check != CRC_OK)
             {
-                RCLCPP_ERROR(this->get_logger(), "Invalid CRC Value! %d != %d",
+                RCLCPP_DEBUG(this->get_logger(), "Invalid CRC Value! %d != %d",
                              crc_check, CRC_OK);
             }
             else

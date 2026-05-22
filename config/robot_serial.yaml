@@ -1,8 +1,10 @@
 # Serial port configuration
+# /**: Para qualquer nome do nó
 robot_comm_serial:
   ros__parameters:
     serial_port: "/dev/robot_ecu"
     baud_rate: 2000000
+    use_cmd_stamped: false
 
     # Timer configuration
     reception_frequency: 500 # [Hz]
