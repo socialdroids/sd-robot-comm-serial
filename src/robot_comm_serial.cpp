@@ -206,6 +206,7 @@ RobotSerial::RobotSerial()
     current_buffer_pos_ = 0;
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
+    fake_battery_pub_time_ = high_resolution_clock::now();
 
     // === WEBSOCKET
     std::string docroot = "";
@@ -1210,7 +1211,16 @@ void RobotSerial::publish_battery()
 
     msg.voltage = last_message_.power_status().voltage_mv() / 1000.f;
     msg.current = 0.0;
-    msg.percentage = last_message_.power_status().battery_percent();
+
+    if (timeSince<milliseconds>(fake_battery_pub_time_) < 3e3)
+    {
+        msg.percentage = 5.0;
+    }
+    else
+    {
+        msg.percentage = last_message_.power_status().battery_percent();
+    }
+
     msg.capacity = last_message_.power_status().battery_capacity();
     msg.design_capacity = last_message_.power_status().battery_capacity();
     msg.power_supply_technology =
@@ -1571,6 +1581,14 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
             RCLCPP_INFO(this->get_logger(),
                         "Enter Stand-By from GUI! Success %d, MSG %s",
                         response->success, response->message.c_str());
+        }
+        if (cmd == "dock_robot")
+        {
+            RCLCPP_INFO(
+                this->get_logger(),
+                "Simulando bateria baixa (5%%) por 3s para forçar o processo "
+                "de docking...");
+            fake_battery_pub_time_ = high_resolution_clock::now();
         }
     }
 }

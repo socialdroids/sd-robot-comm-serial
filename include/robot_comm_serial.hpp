@@ -146,6 +146,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
     std::chrono::time_point<high_resolution_clock> last_cmd_vel_time_;
     std::chrono::time_point<high_resolution_clock> last_virtual_cmd_time_;
+    std::chrono::time_point<high_resolution_clock> fake_battery_pub_time_;
 
     FeedbackMessage last_message_;
     rclcpp::Time last_message_timestamp_;
