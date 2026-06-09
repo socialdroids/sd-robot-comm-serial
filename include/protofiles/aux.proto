@@ -7,6 +7,7 @@ enum RobotState
   ROBOT_STATE_MANUAL = 1;
   ROBOT_STATE_AUTO = 2;
   ROBOT_STATE_STAND_BY = 3;
+  ROBOT_STATE_DOCKING = 4;
 }
 
 message Array3D

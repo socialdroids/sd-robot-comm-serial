@@ -122,6 +122,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enter_standby_srv_;
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr emg_stop_srv_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_ecu_srv_;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr toggle_docking_mode_srv_;
 
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
@@ -191,6 +192,10 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     void reboot_ecu_srv_callback(
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+    void toggle_docking_mode_srv_callback(
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response);
+
     void packet_callback();
     void reconnect_callback();
     void command_callback();

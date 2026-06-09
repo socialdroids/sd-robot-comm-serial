@@ -174,6 +174,10 @@ RobotSerial::RobotSerial()
     reboot_ecu_srv_ = this->create_service<std_srvs::srv::Trigger>(
         "reboot_ecu", std::bind(&RobotSerial::reboot_ecu_srv_callback, this,
                                 std::placeholders::_1, std::placeholders::_2));
+    toggle_docking_mode_srv_ = this->create_service<std_srvs::srv::SetBool>(
+        "toggle_docking_mode",
+        std::bind(&RobotSerial::toggle_docking_mode_srv_callback, this,
+                  std::placeholders::_1, std::placeholders::_2));
 
     setupAudio();
     connect();
@@ -387,6 +391,25 @@ void RobotSerial::reboot_ecu_srv_callback(
         response->success = false;
         response->message = "Another action request is running!";
     }
+}
+
+void RobotSerial::toggle_docking_mode_srv_callback(
+    const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+    std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot State] Docking Mode: %s!",
+                request->data ? "Enabled" : "Disabled");
+    if (request->data)
+    {
+        last_command_.set_state(RobotState::ROBOT_STATE_DOCKING);
+        response->message = "Enabling DOCKING state";
+    }
+    else
+    {
+        last_command_.set_state(RobotState::ROBOT_STATE_AUTO);
+        response->message = "Enabling AUTO state";
+    }
+    response->success = true;
 }
 
 void RobotSerial::packet_callback()
