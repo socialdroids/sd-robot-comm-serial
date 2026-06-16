@@ -210,7 +210,7 @@ RobotSerial::RobotSerial()
     current_buffer_pos_ = 0;
     last_packet_time_ = high_resolution_clock::now();
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
-    fake_battery_pub_time_ = high_resolution_clock::now();
+    fake_battery_pub_time_ = high_resolution_clock::now() - milliseconds(5000);
 
     // === WEBSOCKET
     std::string docroot = "";
@@ -1237,7 +1237,8 @@ void RobotSerial::publish_battery()
 
     if (timeSince<milliseconds>(fake_battery_pub_time_) < 3e3)
     {
-        msg.percentage = 5.0;
+        // 0 < Critical < 15 < Low < 30 < OK < 100
+        msg.percentage = 25.0;
     }
     else
     {
