@@ -14,6 +14,27 @@ Not doing so might result in the code not using the updated protofiles.
 ```shell
 sudo apt install libsdl2-dev libsdl2-mixer-dev
 ```
+## ROS2 Services
+
+Enter Stand-by mode:
+- name: `/enter_stand_by`
+- type: `std_srvs::srv::Trigger`
+- example: `ros2 service call /enter_stand_by std_srvs/srv/Trigger`
+
+Software emergency stop:
+- name: `/emergency_stop`
+- type: `std_srvs::srv::SetBool`
+- example: `ros2 service call /emergency_stop std_srvs/srv/SetBool "{data: True}"`
+
+Reboot ECU:
+- name: `/reboot_ecu`
+- type: `std_srvs::srv::Trigger`
+- example: `ros2 service call /reboot_ecu std_srvs/srv/Trigger`
+
+Toggle Docking mode:
+- name: `/toggle_docking_mode`
+- type: `std_srvs::srv::SetBool`
+- example: `ros2 service call /emergency_stop std_srvs/srv/SetBool "{data: True}"`
 
 ## Running as Systemd service
 
