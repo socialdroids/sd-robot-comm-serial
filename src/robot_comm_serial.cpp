@@ -80,7 +80,7 @@ int playSound(std::string _path)
 
 RobotSerial::RobotSerial()
     : Node("robot_comm_serial"), baud_(1000000), port_("/dev/ttyACM0"),
-      connected_(false)
+      connected_(false), currentLEDSign(LED_SIGN_UNSPECIFIED), cLogger(false)
 {
     // === CONFIGURAÇÕES
     bool cmd_stamped = this->declare_parameter<bool>("use_cmd_stamped", false);
@@ -992,16 +992,19 @@ void RobotSerial::publish_imu()
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
 
-    if (not cLogger.isFull())
+    if (cLogger.isEnabled())
     {
-        cLogger.addData(this->get_clock()->now().nanoseconds(),
-                        last_command_.velocities().angular() / 1000.f,
-                        msg.angular_velocity.z);
-    }
-    else if (not cLogger.isSaved())
-    {
-        cLogger.saveFile();
-        RCLCPP_INFO(this->get_logger(), "[CONTROL] Step data saved!");
+        if (not cLogger.isFull())
+        {
+            cLogger.addData(this->get_clock()->now().nanoseconds(),
+                            last_command_.velocities().angular() / 1000.f,
+                            msg.angular_velocity.z);
+        }
+        else if (not cLogger.isSaved())
+        {
+            cLogger.saveFile();
+            RCLCPP_INFO(this->get_logger(), "[CONTROL] Step data saved!");
+        }
     }
 
     std::fill(msg.angular_velocity_covariance.begin(),
