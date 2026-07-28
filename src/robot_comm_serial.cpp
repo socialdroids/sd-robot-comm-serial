@@ -1,5 +1,6 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
+#include "control_logger.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -264,6 +265,31 @@ void RobotSerial::cmd_vel_callback(
     velocity->set_linear(msg->linear.x * 1000);
     velocity->set_angular(msg->angular.z * 1000);
     last_cmd_vel_time_ = high_resolution_clock::now();
+}
+
+void RobotSerial::led_cmd_callback(LEDSign sign, bool active)
+{
+    RobotConfig* config = last_command_.mutable_config();
+    RobotParameters* parameters = config->mutable_parameters();
+    if (!active)
+    {
+        parameters->set_external_led_control(false);
+    }
+    else
+    {
+        parameters->set_external_led_control(true);
+    }
+
+    if (sign == LED_SIGN_UNSPECIFIED)
+    {
+        return;
+    }
+
+    LEDRequest* ledRequest = last_command_.mutable_led_cmd();
+    ledRequest->set_active(active);
+    ledRequest->set_sign(sign);
+    RCLCPP_INFO(this->get_logger(), "[Robot LED] Request Sent! Sign: %d - %s",
+                ledRequest->sign(), ledRequest->active() ? "on" : "off");
 }
 
 void RobotSerial::jump_to_boot_callback(
@@ -613,6 +639,11 @@ void RobotSerial::clear_command()
             last_command_.sync().t_ros_recv(),
             last_command_.sync().t_ros_send());
         last_command_.clear_sync();
+    }
+
+    if (last_command_.has_led_cmd())
+    {
+        last_command_.clear_led_cmd();
     }
 }
 
@@ -1616,6 +1647,21 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
                 "Simulando bateria baixa (5%%) por 3s para forçar o processo "
                 "de docking...");
             fake_battery_pub_time_ = high_resolution_clock::now();
+        }
+        if (cmd == "led_off")
+        {
+            led_cmd_callback(currentLEDSign, false);
+            currentLEDSign = LED_SIGN_UNSPECIFIED;
+        }
+        if (cmd == "led_action_a")
+        {
+            currentLEDSign = LED_SIGN_TURN_RIGHT;
+            led_cmd_callback(currentLEDSign, true);
+        }
+        if (cmd == "led_action_b")
+        {
+            currentLEDSign = LED_SIGN_TURN_LEFT;
+            led_cmd_callback(currentLEDSign, true);
         }
     }
 }

@@ -175,12 +175,14 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         bool confirmed;
         bool data;
     } jumpToBootStatus, enterStandByStatus, emergencyStopStatus, rebootStatus;
+    LEDSign currentLEDSign;
 
     ControlLogger cLogger;
 
     void cmd_vel_stamped_callback(
         const geometry_msgs::msg::TwistStamped::SharedPtr msg);
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
+    void led_cmd_callback(LEDSign sign, bool active);
 
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
     void enter_standby_srv_callback(
