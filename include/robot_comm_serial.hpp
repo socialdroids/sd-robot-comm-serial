@@ -305,6 +305,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         if (connected_ != prev_conn)
         {
             RCLCPP_WARN(this->get_logger(), "Serial port disconnected!");
+            serial_port_->close();
         }
     }
 };

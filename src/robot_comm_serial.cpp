@@ -659,14 +659,18 @@ void RobotSerial::connect()
 
     if (serial_port_)
     {
-        once = false;
+        once = true;
         serial_port_->setTimeout(10, 1, 0, 1, 0);
         connected_ = serial_port_->isOpen();
-        RCLCPP_INFO(this->get_logger(),
-                    "Serial port info: {Port: %s, Baud Rate: %ld}",
-                    port_.c_str(), baud_);
-        RCLCPP_INFO(this->get_logger(), "Serial port connected? %d",
-                    connected_);
+        if (connected_)
+        {
+            once = false;
+            RCLCPP_INFO(this->get_logger(),
+                        "Serial port info: {Port: %s, Baud Rate: %ld}",
+                        port_.c_str(), baud_);
+            RCLCPP_INFO(this->get_logger(), "Serial port connected? %d",
+                        connected_);
+        }
     }
 }
 
