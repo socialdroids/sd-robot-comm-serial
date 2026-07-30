@@ -85,22 +85,22 @@ message TimeSync {
 enum LEDSign
 {
   LED_SIGN_UNSPECIFIED = 0;
-  // Signos EMERGENCY_STOP até BATTERY_LOW reservados para uso interno da ECU, 
-  // outros signos liberados
+  // Signos reservados para uso interno da ECU, outros signos liberados
   reserved "LED_SIGN_EMERGENCY_STOP", "LED_SIGN_DISCONNECTED",
     "LED_SIGN_INTERNAL_FAILURE", "LED_SIGN_BOOTING", "LED_SIGN_BUMPER_HIT",
-    "LED_SIGN_BATTERY_LOW";
-  reserved 1 to 6;
-  LED_SIGN_TURN_LEFT = 7;
-  LED_SIGN_TURN_RIGHT = 8;
-  LED_SIGN_MOVE_FW_LEFT = 9;
-  LED_SIGN_MOVE_FW_RIGHT = 10;
-  LED_SIGN_MOVE_BW_LEFT = 11;
-  LED_SIGN_MOVE_BW_RIGHT = 12;
-  LED_SIGN_MOVE_FORWARD = 13;
-  LED_SIGN_MOVE_BACKWARD = 14;
-  // TODO: Adicionar signo de relocalização
-  // TODO: Adicionar signo de recuperação
+    "LED_SIGN_DOCKING", "LED_SIGN_BATTERY_LOW", "LED_SIGN_CHARGING",
+    "LED_SIGN_BATTERY_STATUS";
+  reserved 1 to 9;
+  LED_SIGN_RELOCALIZATION = 10;
+  LED_SIGN_RECOVERY = 11;
+  LED_SIGN_TURN_LEFT = 12;
+  LED_SIGN_TURN_RIGHT = 13;
+  LED_SIGN_MOVE_FW_LEFT = 14;
+  LED_SIGN_MOVE_FW_RIGHT = 15;
+  LED_SIGN_MOVE_BW_LEFT = 16;
+  LED_SIGN_MOVE_BW_RIGHT = 17;
+  LED_SIGN_MOVE_FORWARD = 18;
+  LED_SIGN_MOVE_BACKWARD = 19;
 }
 
 message LEDRequest

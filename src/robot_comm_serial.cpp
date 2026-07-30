@@ -1667,6 +1667,16 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
             currentLEDSign = LED_SIGN_TURN_LEFT;
             led_cmd_callback(currentLEDSign, true);
         }
+        if (cmd == "led_action_c")
+        {
+            currentLEDSign = LED_SIGN_RELOCALIZATION;
+            led_cmd_callback(currentLEDSign, true);
+        }
+        if (cmd == "led_action_d")
+        {
+            currentLEDSign = LED_SIGN_RECOVERY;
+            led_cmd_callback(currentLEDSign, true);
+        }
     }
 }
 
