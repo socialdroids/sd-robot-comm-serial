@@ -164,6 +164,10 @@ RobotSerial::RobotSerial()
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
 
+    led_cmd_sub_ = this->create_subscription<sd_msgs::msg::LEDCommand>(
+        "robot_action/led_command", best_effort_qos, // QoS History Depth
+        std::bind(&RobotSerial::led_cmd_callback, this, std::placeholders::_1));
+
     enter_standby_srv_ = this->create_service<std_srvs::srv::Trigger>(
         "enter_stand_by",
         std::bind(&RobotSerial::enter_standby_srv_callback, this,
@@ -267,11 +271,12 @@ void RobotSerial::cmd_vel_callback(
     last_cmd_vel_time_ = high_resolution_clock::now();
 }
 
-void RobotSerial::led_cmd_callback(LEDSign sign, bool active)
+void RobotSerial::led_cmd_callback(
+    const sd_msgs::msg::LEDCommand::SharedPtr msg)
 {
     RobotConfig* config = last_command_.mutable_config();
     RobotParameters* parameters = config->mutable_parameters();
-    if (!active)
+    if (!msg->active)
     {
         parameters->set_external_led_control(false);
     }
@@ -280,16 +285,30 @@ void RobotSerial::led_cmd_callback(LEDSign sign, bool active)
         parameters->set_external_led_control(true);
     }
 
-    if (sign == LED_SIGN_UNSPECIFIED)
+    if (LEDSign_IsValid(msg->sign))
     {
-        return;
-    }
+        LEDRequest* ledRequest = last_command_.mutable_led_cmd();
+        ledRequest->set_active(msg->active);
+        ledRequest->set_sign(static_cast<LEDSign>(msg->sign));
 
-    LEDRequest* ledRequest = last_command_.mutable_led_cmd();
-    ledRequest->set_active(active);
-    ledRequest->set_sign(sign);
-    RCLCPP_INFO(this->get_logger(), "[Robot LED] Request Sent! Sign: %d - %s",
-                ledRequest->sign(), ledRequest->active() ? "on" : "off");
+        if (msg->sign == LED_SIGN_UNSPECIFIED)
+        {
+            RCLCPP_WARN(this->get_logger(), "[Robot LED] %s received!",
+                        LEDSign_Name(msg->sign).c_str());
+            return;
+        }
+        RCLCPP_INFO(this->get_logger(),
+                    "[Robot LED] Request received! Sign: %s - %s",
+                    LEDSign_Name(ledRequest->sign()).c_str(),
+                    ledRequest->active() ? "on" : "off");
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot LED] Invalid Sign Request! %d is not a valid sign ID",
+            msg->sign);
+    }
 }
 
 void RobotSerial::jump_to_boot_callback(
@@ -988,8 +1007,8 @@ void RobotSerial::publish_flags()
     msg.angular_motion_detection =
         last_message_.imu().angular_motion_detected();
 
-    msg.stand_by_requested = last_message_.stand_by().stand_by_request();
-    msg.stand_by_confirmed = last_message_.stand_by().stand_by_confirm();
+    msg.stand_by_requested = last_message_.stand_by().request();
+    msg.stand_by_confirmed = false; // TODO: REMOVIDO
     robot_flags_pub_->publish(msg);
 }
 
@@ -1652,30 +1671,42 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
                 "de docking...");
             fake_battery_pub_time_ = high_resolution_clock::now();
         }
-        if (cmd == "led_off")
+
+        if (strstr(cmd.c_str(), "led_") != nullptr)
         {
-            led_cmd_callback(currentLEDSign, false);
-            currentLEDSign = LED_SIGN_UNSPECIFIED;
-        }
-        if (cmd == "led_action_a")
-        {
-            currentLEDSign = LED_SIGN_TURN_RIGHT;
-            led_cmd_callback(currentLEDSign, true);
-        }
-        if (cmd == "led_action_b")
-        {
-            currentLEDSign = LED_SIGN_TURN_LEFT;
-            led_cmd_callback(currentLEDSign, true);
-        }
-        if (cmd == "led_action_c")
-        {
-            currentLEDSign = LED_SIGN_RELOCALIZATION;
-            led_cmd_callback(currentLEDSign, true);
-        }
-        if (cmd == "led_action_d")
-        {
-            currentLEDSign = LED_SIGN_RECOVERY;
-            led_cmd_callback(currentLEDSign, true);
+            auto ledCmd = std::make_shared<sd_msgs::msg::LEDCommand>();
+
+            if (cmd == "led_off")
+            {
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = false;
+                currentLEDSign = LED_SIGN_UNSPECIFIED;
+            }
+            if (cmd == "led_action_a")
+            {
+                currentLEDSign = LED_SIGN_TURN_RIGHT;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            if (cmd == "led_action_b")
+            {
+                currentLEDSign = LED_SIGN_TURN_LEFT;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            if (cmd == "led_action_c")
+            {
+                currentLEDSign = LED_SIGN_RELOCALIZATION;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            if (cmd == "led_action_d")
+            {
+                currentLEDSign = LED_SIGN_RECOVERY;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            led_cmd_callback(ledCmd);
         }
     }
 }

@@ -50,11 +50,17 @@ message WakeUpConfig
   optional bool saturday = 9;
 }
 
+enum StandByState{
+  STAND_BY_STATE_UNSPECIFIED = 0;
+  STAND_BY_STATE_ON = 1; // Stand-by ativo -> robô desligado
+  STAND_BY_STATE_OFF = 2;
+}
+
 message StandBy
 {
-  bool stand_by_connected = 1;
-  bool stand_by_request = 2;
-  bool stand_by_confirm = 3;
+  bool connected = 1;
+  bool request = 2;
+  StandByState state = 3;
   int64 timestamp = 4;
   optional WakeUpConfig wake_up = 5;
 }
@@ -82,6 +88,7 @@ message TimeSync {
   uint64 t_mcu_recv = 4; /**< ECU timestamp raw de recebimento em [us] */
 }
 
+// Tem que estar sincronizado com o LEDCommand.msg (sd_msgs)
 enum LEDSign
 {
   LED_SIGN_UNSPECIFIED = 0;
