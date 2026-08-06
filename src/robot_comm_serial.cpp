@@ -638,10 +638,10 @@ void RobotSerial::clear_command()
     if (last_command_.has_actions())
     {
         last_command_.clear_actions();
-        if (last_command_.has_state())
-        {
-            last_command_.clear_state();
-        }
+    }
+    if (last_command_.has_state())
+    {
+        last_command_.clear_state();
     }
 
     if (last_command_.has_config())
