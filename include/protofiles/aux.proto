@@ -50,11 +50,17 @@ message WakeUpConfig
   optional bool saturday = 9;
 }
 
+enum StandByState{
+  STAND_BY_STATE_UNSPECIFIED = 0;
+  STAND_BY_STATE_ON = 1; // Stand-by ativo -> robô desligado
+  STAND_BY_STATE_OFF = 2;
+}
+
 message StandBy
 {
-  bool stand_by_connected = 1;
-  bool stand_by_request = 2;
-  bool stand_by_confirm = 3;
+  bool connected = 1;
+  bool request = 2;
+  StandByState state = 3;
   int64 timestamp = 4;
   optional WakeUpConfig wake_up = 5;
 }
@@ -80,4 +86,32 @@ message TimeSync {
   uint64 t_ros_recv = 2; /**< ROS timestamp de recebimento em [ns] */ 
   uint64 t_ros_send = 3; /**< ROS timestamp de envio em [ns] */
   uint64 t_mcu_recv = 4; /**< ECU timestamp raw de recebimento em [us] */
+}
+
+// Tem que estar sincronizado com o LEDCommand.msg (sd_msgs)
+enum LEDSign
+{
+  LED_SIGN_UNSPECIFIED = 0;
+  // Signos reservados para uso interno da ECU, outros signos liberados
+  reserved "LED_SIGN_EMERGENCY_STOP", "LED_SIGN_DISCONNECTED",
+    "LED_SIGN_INTERNAL_FAILURE", "LED_SIGN_BOOTING", "LED_SIGN_BUMPER_HIT",
+    "LED_SIGN_DOCKING", "LED_SIGN_BATTERY_LOW", "LED_SIGN_CHARGING",
+    "LED_SIGN_BATTERY_STATUS";
+  reserved 1 to 9;
+  LED_SIGN_RELOCALIZATION = 10;
+  LED_SIGN_RECOVERY = 11;
+  LED_SIGN_TURN_LEFT = 12;
+  LED_SIGN_TURN_RIGHT = 13;
+  LED_SIGN_MOVE_FW_LEFT = 14;
+  LED_SIGN_MOVE_FW_RIGHT = 15;
+  LED_SIGN_MOVE_BW_LEFT = 16;
+  LED_SIGN_MOVE_BW_RIGHT = 17;
+  LED_SIGN_MOVE_FORWARD = 18;
+  LED_SIGN_MOVE_BACKWARD = 19;
+}
+
+message LEDRequest
+{
+  LEDSign sign = 1;
+  bool active = 2;
 }

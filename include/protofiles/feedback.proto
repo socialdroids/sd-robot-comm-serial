@@ -190,6 +190,7 @@ message RobotParameters
   optional float wheel_diameter = 5;
   optional float wheel_distance = 6;
   optional IMUConfig imu_config = 7;
+  optional bool external_led_control = 8;
 }
 
 enum BumperID {
@@ -311,6 +312,5 @@ message FeedbackMessage
   // reconhecido. Comandos opcionais: RobotActions, RobotConfig, RobotState,
   // WakeUpConfig, timestamp
   optional bool last_command_ok = 12;
-
   optional TimeSync sync = 13;
 }

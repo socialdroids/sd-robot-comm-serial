@@ -10,7 +10,7 @@
 class ControlLogger
 {
 public:
-    ControlLogger()
+    explicit ControlLogger(bool _enable) : enabled(_enable)
     {
         time.fill(0.f);
         input.fill(0.f);
@@ -47,6 +47,11 @@ public:
         return dataSaved;
     }
 
+    bool isEnabled()
+    {
+        return enabled;
+    }
+
     bool saveFile()
     {
         if (dataSaved)
@@ -81,6 +86,7 @@ private:
     std::array<uint64_t, MAX_SAMPLES> time;
     size_t samples;
     bool dataSaved;
+    bool enabled;
 };
 
 #endif // INCLUDE_INCLUDE_CONTROL_LOGGER_HPP_

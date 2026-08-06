@@ -1,5 +1,6 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
+#include "control_logger.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -80,7 +81,7 @@ int playSound(std::string _path)
 
 RobotSerial::RobotSerial()
     : Node("robot_comm_serial"), baud_(1000000), port_("/dev/ttyACM0"),
-      connected_(false)
+      connected_(false), currentLEDSign(LED_SIGN_UNSPECIFIED), cLogger(false)
 {
     // === CONFIGURAÇÕES
     bool cmd_stamped = this->declare_parameter<bool>("use_cmd_stamped", false);
@@ -162,6 +163,10 @@ RobotSerial::RobotSerial()
         "robot_action/jump_to_boot", best_effort_qos, // QoS History Depth
         std::bind(&RobotSerial::jump_to_boot_callback, this,
                   std::placeholders::_1));
+
+    led_cmd_sub_ = this->create_subscription<sd_msgs::msg::LEDCommand>(
+        "robot_action/led_command", best_effort_qos, // QoS History Depth
+        std::bind(&RobotSerial::led_cmd_callback, this, std::placeholders::_1));
 
     enter_standby_srv_ = this->create_service<std_srvs::srv::Trigger>(
         "enter_stand_by",
@@ -264,6 +269,46 @@ void RobotSerial::cmd_vel_callback(
     velocity->set_linear(msg->linear.x * 1000);
     velocity->set_angular(msg->angular.z * 1000);
     last_cmd_vel_time_ = high_resolution_clock::now();
+}
+
+void RobotSerial::led_cmd_callback(
+    const sd_msgs::msg::LEDCommand::SharedPtr msg)
+{
+    RobotConfig* config = last_command_.mutable_config();
+    RobotParameters* parameters = config->mutable_parameters();
+    if (!msg->active)
+    {
+        parameters->set_external_led_control(false);
+    }
+    else
+    {
+        parameters->set_external_led_control(true);
+    }
+
+    if (LEDSign_IsValid(msg->sign))
+    {
+        LEDRequest* ledRequest = last_command_.mutable_led_cmd();
+        ledRequest->set_active(msg->active);
+        ledRequest->set_sign(static_cast<LEDSign>(msg->sign));
+
+        if (msg->sign == LED_SIGN_UNSPECIFIED)
+        {
+            RCLCPP_WARN(this->get_logger(), "[Robot LED] %s received!",
+                        LEDSign_Name(msg->sign).c_str());
+            return;
+        }
+        RCLCPP_INFO(this->get_logger(),
+                    "[Robot LED] Request received! Sign: %s - %s",
+                    LEDSign_Name(ledRequest->sign()).c_str(),
+                    ledRequest->active() ? "on" : "off");
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot LED] Invalid Sign Request! %d is not a valid sign ID",
+            msg->sign);
+    }
 }
 
 void RobotSerial::jump_to_boot_callback(
@@ -614,6 +659,11 @@ void RobotSerial::clear_command()
             last_command_.sync().t_ros_send());
         last_command_.clear_sync();
     }
+
+    if (last_command_.has_led_cmd())
+    {
+        last_command_.clear_led_cmd();
+    }
 }
 
 void RobotSerial::connect()
@@ -628,14 +678,18 @@ void RobotSerial::connect()
 
     if (serial_port_)
     {
-        once = false;
+        once = true;
         serial_port_->setTimeout(10, 1, 0, 1, 0);
         connected_ = serial_port_->isOpen();
-        RCLCPP_INFO(this->get_logger(),
-                    "Serial port info: {Port: %s, Baud Rate: %ld}",
-                    port_.c_str(), baud_);
-        RCLCPP_INFO(this->get_logger(), "Serial port connected? %d",
-                    connected_);
+        if (connected_)
+        {
+            once = false;
+            RCLCPP_INFO(this->get_logger(),
+                        "Serial port info: {Port: %s, Baud Rate: %ld}",
+                        port_.c_str(), baud_);
+            RCLCPP_INFO(this->get_logger(), "Serial port connected? %d",
+                        connected_);
+        }
     }
 }
 
@@ -953,8 +1007,8 @@ void RobotSerial::publish_flags()
     msg.angular_motion_detection =
         last_message_.imu().angular_motion_detected();
 
-    msg.stand_by_requested = last_message_.stand_by().stand_by_request();
-    msg.stand_by_confirmed = last_message_.stand_by().stand_by_confirm();
+    msg.stand_by_requested = last_message_.stand_by().request();
+    msg.stand_by_confirmed = false; // TODO: REMOVIDO
     robot_flags_pub_->publish(msg);
 }
 
@@ -992,16 +1046,19 @@ void RobotSerial::publish_imu()
     msg.angular_velocity.y = last_message_.imu().gyro().y() / 1000.f;
     msg.angular_velocity.z = last_message_.imu().gyro().z() / 1000.f;
 
-    if (not cLogger.isFull())
+    if (cLogger.isEnabled())
     {
-        cLogger.addData(this->get_clock()->now().nanoseconds(),
-                        last_command_.velocities().angular() / 1000.f,
-                        msg.angular_velocity.z);
-    }
-    else if (not cLogger.isSaved())
-    {
-        cLogger.saveFile();
-        RCLCPP_INFO(this->get_logger(), "[CONTROL] Step data saved!");
+        if (not cLogger.isFull())
+        {
+            cLogger.addData(this->get_clock()->now().nanoseconds(),
+                            last_command_.velocities().angular() / 1000.f,
+                            msg.angular_velocity.z);
+        }
+        else if (not cLogger.isSaved())
+        {
+            cLogger.saveFile();
+            RCLCPP_INFO(this->get_logger(), "[CONTROL] Step data saved!");
+        }
     }
 
     std::fill(msg.angular_velocity_covariance.begin(),
@@ -1613,6 +1670,43 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
                 "Simulando bateria baixa (5%%) por 3s para forçar o processo "
                 "de docking...");
             fake_battery_pub_time_ = high_resolution_clock::now();
+        }
+
+        if (strstr(cmd.c_str(), "led_") != nullptr)
+        {
+            auto ledCmd = std::make_shared<sd_msgs::msg::LEDCommand>();
+
+            if (cmd == "led_off")
+            {
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = false;
+                currentLEDSign = LED_SIGN_UNSPECIFIED;
+            }
+            if (cmd == "led_action_a")
+            {
+                currentLEDSign = LED_SIGN_TURN_RIGHT;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            if (cmd == "led_action_b")
+            {
+                currentLEDSign = LED_SIGN_TURN_LEFT;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            if (cmd == "led_action_c")
+            {
+                currentLEDSign = LED_SIGN_RELOCALIZATION;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            if (cmd == "led_action_d")
+            {
+                currentLEDSign = LED_SIGN_RECOVERY;
+                ledCmd->sign = currentLEDSign;
+                ledCmd->active = true;
+            }
+            led_cmd_callback(ledCmd);
         }
     }
 }

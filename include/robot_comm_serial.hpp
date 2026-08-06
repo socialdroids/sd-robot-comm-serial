@@ -51,6 +51,7 @@
 #include "sd_msgs/msg/robot_encoders.hpp"
 #include "sd_msgs/msg/robot_flags.hpp"
 #include "sd_msgs/msg/robot_parameters.hpp"
+#include "sd_msgs/msg/led_command.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -118,6 +119,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         cmd_vel_stamped_sub_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr jump_to_boot_sub_;
+    rclcpp::Subscription<sd_msgs::msg::LEDCommand>::SharedPtr led_cmd_sub_;
 
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enter_standby_srv_;
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr emg_stop_srv_;
@@ -175,12 +177,14 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         bool confirmed;
         bool data;
     } jumpToBootStatus, enterStandByStatus, emergencyStopStatus, rebootStatus;
+    LEDSign currentLEDSign;
 
     ControlLogger cLogger;
 
     void cmd_vel_stamped_callback(
         const geometry_msgs::msg::TwistStamped::SharedPtr msg);
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg);
+    void led_cmd_callback(const sd_msgs::msg::LEDCommand::SharedPtr msg);
 
     void jump_to_boot_callback(const std_msgs::msg::Bool::SharedPtr msg);
     void enter_standby_srv_callback(
@@ -303,6 +307,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         if (connected_ != prev_conn)
         {
             RCLCPP_WARN(this->get_logger(), "Serial port disconnected!");
+            serial_port_->close();
         }
     }
 };

@@ -50,4 +50,5 @@ message CommandMessage
   optional RobotActions actions = 5;
   optional RobotConfig config = 6;
   optional TimeSync sync = 7;
+  optional LEDRequest led_cmd =8; 
 }
