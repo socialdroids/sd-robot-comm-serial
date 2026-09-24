@@ -276,6 +276,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
         gauges.tempMCU = new Gauge(document.getElementById('gauge-temp-mcu')).setOptions(tempOpts);
         gauges.tempMCU.maxValue = 100; gauges.tempMCU.set(0);
+
+        gauges.tempDriver = new Gauge(document.getElementById('gauge-temp-driver')).setOptions(tempOpts);
+        gauges.tempDriver.maxValue = 100; gauges.tempDriver.set(0);
+
+        gauges.tempLeftMotor = new Gauge(document.getElementById('gauge-temp-left-m')).setOptions(tempOpts);
+        gauges.tempLeftMotor.maxValue = 100; gauges.tempLeftMotor.set(0);
+
+        gauges.tempRightMotor = new Gauge(document.getElementById('gauge-temp-right-m')).setOptions(tempOpts);
+        gauges.tempRightMotor.maxValue = 100; gauges.tempRightMotor.set(0);
+
+        gauges.busVoltage = new Gauge(document.getElementById('gauge-bus-voltage')).setOptions(gaugeOpts);
+        gauges.busVoltage.maxValue = 60; gauges.busVoltage.set(0);
+
+        gauges.currentLeftMotor = new Gauge(document.getElementById('gauge-current-left-m')).setOptions(gaugeOpts);
+        gauges.currentLeftMotor.maxValue = 5; gauges.currentLeftMotor.set(0);
+
+        gauges.currentRightMotor = new Gauge(document.getElementById('gauge-current-right-m')).setOptions(gaugeOpts);
+        gauges.currentRightMotor.maxValue = 5; gauges.currentRightMotor.set(0);
     }
     
     // --- Atualização de Dados ---
@@ -353,6 +371,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
         gauges.tempMCU.set(data.gauges.temp_mcu);
         document.getElementById('gauge-val-temp-mcu').textContent = data.gauges.temp_mcu.toFixed(1);
+
+        gauges.tempDriver.set(data.gauges.temp_driver);
+        document.getElementById('gauge-val-temp-driver').textContent = data.gauges.temp_driver.toFixed(1);
+
+        gauges.tempLeftMotor.set(data.gauges.temp_left_motor);
+        document.getElementById('gauge-val-temp-left-m').textContent = data.gauges.temp_left_motor.toFixed(1);
+
+        gauges.tempRightMotor.set(data.gauges.temp_right_motor);
+        document.getElementById('gauge-val-temp-right-m').textContent = data.gauges.temp_right_motor.toFixed(1);
+
+        gauges.busVoltage.set(data.gauges.bus_voltage);
+        document.getElementById('gauge-val-bus-voltage').textContent = data.gauges.bus_voltage.toFixed(1);
+
+        gauges.currentLeftMotor.set(data.gauges.current_left_motor);
+        document.getElementById('gauge-val-current-left-m').textContent = data.gauges.current_left_motor.toFixed(1);
+
+        gauges.busVoltage.set(data.gauges.current_right_motor);
+        document.getElementById('gauge-val-current-right-m').textContent = data.gauges.current_right_motor.toFixed(1);
     }
     
     function updateIndicators(flags) {

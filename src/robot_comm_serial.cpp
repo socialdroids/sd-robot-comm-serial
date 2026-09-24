@@ -1905,7 +1905,15 @@ void RobotSerial::publish_full_status()
          last_message_.power_status().charging_current_ma() / 1000.f},
         {"temp_imu", last_message_.imu().temperature()},
         {"temp_ecu", last_message_.power_status().temperature()},
-        {"temp_mcu", last_message_.power_status().internal_temperature()}};
+        {"temp_mcu", last_message_.power_status().internal_temperature()},
+        {"temp_driver", last_message_.power_status().internal_temperature()},
+        {"temp_left_motor", last_message_.power_status().internal_temperature()},
+        {"temp_right_motor", last_message_.power_status().internal_temperature()},
+        {"bus_voltage", 24.54},
+        {"current_left_motor", 2.52},
+        {"current_right_motor", 1.53}
+    };
+    // TODO: Atualizar dados novos
 
     bool bpFL = false, bpFR = false, bpBL = false, bpBR = false;
     if (last_message_.bumpers_size() > 3)
