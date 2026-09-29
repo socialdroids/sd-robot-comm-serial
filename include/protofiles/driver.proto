@@ -6,6 +6,7 @@ enum CommandType
   COMMAND_TYPE_UNSPECIFIED = 0;
   COMMAND_TYPE_VELOCITY = 1;
   COMMAND_TYPE_ANGLE = 2;
+  COMMAND_TYPE_TORQUE = 3;
 }
 
 enum OTAStatus
@@ -35,6 +36,7 @@ message OTAFeedback
 message MotorCommand { 
   float velocity = 1;
   float angle = 2;
+  float torque = 3;
 }
 
 message DriverCommand
@@ -47,12 +49,26 @@ message DriverCommand
   optional MotorCommand left = 5;
   optional MotorCommand right = 6;
   optional MotorCommand single = 7;
+  optional bool acknowledge_fault = 8;
 }
 
 message MotorStatus {
   float velocity = 1;
   float position = 2;
   float current = 3;
+  uint32 error_code = 4;
+  float temperature = 5;
+  uint32 status = 6;
+  bool running = 7;
+  uint32 hall_state = 8;
+}
+
+enum EmergencyButtonStatus {
+  EMERGENCY_BUTTON_STATUS_UNSPECIFIED = 0;
+  EMERGENCY_BUTTON_STATUS_NONE = 1;
+  EMERGENCY_BUTTON_STATUS_INPUT1 = 2;
+  EMERGENCY_BUTTON_STATUS_INPUT2 = 3;
+  EMERGENCY_BUTTON_STATUS_BOTH = 4;
 }
 
 message DriverFeedback
@@ -65,4 +81,9 @@ message DriverFeedback
   optional MotorStatus left = 5;
   optional MotorStatus right = 6;
   optional MotorStatus single = 7;
+
+  optional EmergencyButtonStatus emergency_button = 8;
+  float bus_voltage = 9;
+  float temperature = 10;
+  uint32 version = 11;
 }
