@@ -1464,7 +1464,7 @@ void RobotSerial::publish_rtos_info()
     {
         // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
         // "%s",
-        RCLCPP_INFO(this->get_logger(), "%s",
+        RCLCPP_DEBUG(this->get_logger(), "%s",
                     last_message_.control_feedback()
                         .driver_feedback()
                         .DebugString()
