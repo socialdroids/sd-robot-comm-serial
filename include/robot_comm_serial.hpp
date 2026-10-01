@@ -43,6 +43,7 @@
 #include "sd_msgs/msg/bumper.hpp"
 #include "sd_msgs/msg/encoder.hpp"
 #include "sd_msgs/msg/encoder_status.hpp"
+#include "sd_msgs/msg/led_command.hpp"
 #include "sd_msgs/msg/pid_config.hpp"
 #include "sd_msgs/msg/power_on_time.hpp"
 #include "sd_msgs/msg/power_status.hpp"
@@ -51,7 +52,6 @@
 #include "sd_msgs/msg/robot_encoders.hpp"
 #include "sd_msgs/msg/robot_flags.hpp"
 #include "sd_msgs/msg/robot_parameters.hpp"
-#include "sd_msgs/msg/led_command.hpp"
 
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -93,7 +93,7 @@ public:
 private:
     static constexpr char PACKET_END[] = {"\0"};
     static constexpr size_t MAX_PACKET_SIZE = {
-        4220}; /** Tamanho máximo de um pacote enviado ou recebido. Valor
+        4500}; /** Tamanho máximo de um pacote enviado ou recebido. Valor
 definido com base no
 COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
 */
@@ -176,7 +176,8 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
         std::chrono::time_point<high_resolution_clock> sentTimestamp;
         bool confirmed;
         bool data;
-    } jumpToBootStatus, enterStandByStatus, emergencyStopStatus, rebootStatus;
+    } jumpToBootStatus, enterStandByStatus, emergencyStopStatus, rebootStatus,
+        ackFaultStatus;
     LEDSign currentLEDSign;
 
     ControlLogger cLogger;
@@ -199,6 +200,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     void toggle_docking_mode_srv_callback(
         const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
         std::shared_ptr<std_srvs::srv::SetBool::Response> response);
+    void acknowledge_fault_callback();
 
     void packet_callback();
     void reconnect_callback();

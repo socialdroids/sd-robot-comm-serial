@@ -313,4 +313,5 @@ message FeedbackMessage
   // WakeUpConfig, timestamp
   optional bool last_command_ok = 12;
   optional TimeSync sync = 13;
+  ControlFeedback control_feedback = 14;
 }

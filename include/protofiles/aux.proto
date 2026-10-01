@@ -1,4 +1,5 @@
 syntax = "proto3";
+import "driver.proto";
 import "nanopb.proto";
 
 enum RobotState
@@ -8,6 +9,7 @@ enum RobotState
   ROBOT_STATE_AUTO = 2;
   ROBOT_STATE_STAND_BY = 3;
   ROBOT_STATE_DOCKING = 4;
+  ROBOT_STATE_EMERGENCY = 5;
 }
 
 message Array3D
@@ -114,4 +116,9 @@ message LEDRequest
 {
   LEDSign sign = 1;
   bool active = 2;
+}
+
+message ControlFeedback
+{
+  DriverFeedback driver_feedback = 1;
 }
