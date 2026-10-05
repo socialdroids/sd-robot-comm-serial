@@ -32,6 +32,7 @@ message RobotActions
   optional bool dump_parameters = 5;
   optional bool enter_stand_by = 6;
   optional bool reboot = 7;
+  optional bool acknowledge_fault = 8;
 }
 
 message RobotConfig

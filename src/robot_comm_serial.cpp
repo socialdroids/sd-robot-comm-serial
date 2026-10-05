@@ -457,6 +457,36 @@ void RobotSerial::toggle_docking_mode_srv_callback(
     response->success = true;
 }
 
+void RobotSerial::acknowledge_fault_callback()
+{
+    RCLCPP_INFO(this->get_logger(), "[Robot Action] ACK Fault");
+    if (not jumpToBootStatus.active && not enterStandByStatus.active &&
+        not rebootStatus.active)
+    {
+        RobotActions* action = last_command_.mutable_actions();
+        action->set_acknowledge_fault(true);
+        ackFaultStatus.active = true;
+        ackFaultStatus.confirmed = false;
+        ackFaultStatus.sent = 1;
+        ackFaultStatus.data = true;
+        ackFaultStatus.sentTimestamp = high_resolution_clock::now();
+
+        // response->success = true;
+    }
+    else
+    {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "[Robot Action] Failed to send Ack Fault request! Another "
+            "action is already queued! JumpToBoot=%d, EnterStandBy=%d, "
+            "Reboot=%d",
+            jumpToBootStatus.active, enterStandByStatus.active,
+            rebootStatus.active);
+        // response->success = false;
+        // response->message = "Another action request is running!";
+    }
+}
+
 void RobotSerial::packet_callback()
 {
     auto t_begin = high_resolution_clock::now(),
@@ -1429,6 +1459,17 @@ void RobotSerial::publish_rtos_info()
         last_message_.mutable_info()->clear_rtos_tasks();
         ws_interface_->send_robot_status(rtos_tasks);
     }
+    if (last_message_.has_control_feedback() &&
+        last_message_.control_feedback().has_driver_feedback())
+    {
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+        // "%s",
+        RCLCPP_DEBUG(this->get_logger(), "%s",
+                    last_message_.control_feedback()
+                        .driver_feedback()
+                        .DebugString()
+                        .c_str());
+    }
 }
 
 bool RobotSerial::fake_charging_status()
@@ -1671,6 +1712,19 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
                 "de docking...");
             fake_battery_pub_time_ = high_resolution_clock::now();
         }
+        if (cmd == "ack_fault")
+        {
+            // auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+            // auto response =
+            //     std::make_shared<std_srvs::srv::Trigger::Response>();
+            // acknowledge_fault_callback(request, response);
+            acknowledge_fault_callback();
+
+            RCLCPP_INFO(this->get_logger(),
+                        "ACK Fault from GUI! Success %d, MSG %s",
+                        true, "");
+                        // response->success, response->message.c_str());
+        }
 
         if (strstr(cmd.c_str(), "led_") != nullptr)
         {
@@ -1905,7 +1959,23 @@ void RobotSerial::publish_full_status()
          last_message_.power_status().charging_current_ma() / 1000.f},
         {"temp_imu", last_message_.imu().temperature()},
         {"temp_ecu", last_message_.power_status().temperature()},
-        {"temp_mcu", last_message_.power_status().internal_temperature()}};
+        {"temp_mcu", last_message_.power_status().internal_temperature()},
+        {"temp_driver",
+         last_message_.control_feedback().driver_feedback().temperature()},
+        {"temp_left_motor", last_message_.control_feedback()
+                                .driver_feedback()
+                                .left()
+                                .temperature()},
+        {"temp_right_motor", last_message_.control_feedback()
+                                 .driver_feedback()
+                                 .right()
+                                 .temperature()},
+        {"bus_voltage",
+         last_message_.control_feedback().driver_feedback().bus_voltage()},
+        {"current_left_motor",
+         last_message_.control_feedback().driver_feedback().left().current()},
+        {"current_right_motor",
+         last_message_.control_feedback().driver_feedback().right().current()}};
 
     bool bpFL = false, bpFR = false, bpBL = false, bpBR = false;
     if (last_message_.bumpers_size() > 3)
@@ -1988,3 +2058,4 @@ int main(int argc, char* argv[])
 
     return 0;
 }
+
