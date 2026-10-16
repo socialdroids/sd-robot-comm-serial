@@ -23,6 +23,7 @@
 #include "std_srvs/srv/trigger.hpp"
 
 #include "navigation_tester.hpp"
+#include "pid_config.hpp"
 #include "websocket_interface.hpp"
 
 #include "cobs.h"
@@ -39,6 +40,10 @@
 
 // ROS messages
 #include "sd_msgs/msg/base_params.hpp"
+#include "sd_msgs/msg/base_pid.hpp"
+#include "sd_msgs/msg/driver_status.hpp"
+#include "sd_msgs/msg/rtos_tasks.hpp"
+#include "sd_msgs/srv/set_base_pid.hpp"
 #include "sd_msgs/msg/build_info.hpp"
 #include "sd_msgs/msg/bumper.hpp"
 #include "sd_msgs/msg/encoder.hpp"
@@ -114,6 +119,9 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Publisher<sd_msgs::msg::PowerStatus>::SharedPtr power_status_pub_;
     rclcpp::Publisher<sd_msgs::msg::PowerOnTime>::SharedPtr power_on_time_pub_;
     rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
+    rclcpp::Publisher<sd_msgs::msg::DriverStatus>::SharedPtr driver_status_pub_;
+    rclcpp::Publisher<sd_msgs::msg::BasePid>::SharedPtr base_pid_pub_;
+    rclcpp::Publisher<sd_msgs::msg::RtosTasks>::SharedPtr rtos_tasks_pub_;
 
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr
         cmd_vel_stamped_sub_;
@@ -125,6 +133,10 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr emg_stop_srv_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_ecu_srv_;
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr toggle_docking_mode_srv_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr ack_fault_srv_;
+    rclcpp::Service<sd_msgs::srv::SetBasePid>::SharedPtr set_pid_srv_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
+        parameters_callback_;
 
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;
@@ -146,6 +158,8 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     uint8_t encoded_packet_[MAX_PACKET_SIZE]; /**< Protobuf encoded packet. */
     static constexpr size_t MAX_FREQUENCY_SAMPLES = 100;
     std::deque<float> packet_frequency_;
+    uint32_t good_packets_ = 0; /**< Packets decoded with a valid CRC. */
+    uint32_t bad_packets_ = 0;  /**< Packets dropped (COBS or CRC). */
     std::chrono::time_point<high_resolution_clock> last_packet_time_;
     std::chrono::time_point<high_resolution_clock> last_cmd_vel_time_;
     std::chrono::time_point<high_resolution_clock> last_virtual_cmd_time_;
@@ -200,7 +214,15 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     void toggle_docking_mode_srv_callback(
         const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
         std::shared_ptr<std_srvs::srv::SetBool::Response> response);
-    void acknowledge_fault_callback();
+    /** Queues the ECU fault acknowledgement; false when another action is
+     * already queued. */
+    bool acknowledge_fault_callback();
+    void ack_fault_srv_callback(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+    void set_pid_srv_callback(
+        const std::shared_ptr<sd_msgs::srv::SetBasePid::Request> request,
+        std::shared_ptr<sd_msgs::srv::SetBasePid::Response> response);
 
     void packet_callback();
     void reconnect_callback();
@@ -231,6 +253,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     void publish_battery();
     void publish_robot_config();
     void publish_rtos_info();
+    void publish_driver_status();
 
     /**
      * @brief Determina o estado de carregamento fake baseado na distância para

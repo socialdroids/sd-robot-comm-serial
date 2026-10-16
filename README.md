@@ -36,6 +36,58 @@ Toggle Docking mode:
 - type: `std_srvs::srv::SetBool`
 - example: `ros2 service call /emergency_stop std_srvs/srv/SetBool "{data: True}"`
 
+Acknowledge an ECU fault:
+- name: `/ack_fault`
+- type: `std_srvs::srv::Trigger`
+- `success=false` ("Another action request is running!") while another ECU
+  action is queued
+- example: `ros2 service call /ack_fault std_srvs/srv/Trigger`
+
+Set the gains of one control loop:
+- name: `/set_pid`
+- type: `sd_msgs::srv::SetBasePid` (`loop`: 1 linear, 2 angular, 3 left wheel,
+  4 right wheel; `config`: `k_p`, `k_i`, `k_d`, `enabled`)
+- `success=false` for an unknown loop or while the ECU is not connected
+- example: `ros2 service call /set_pid sd_msgs/srv/SetBasePid "{loop: 1, config: {k_p: 1.0, k_i: 0.1, k_d: 0.0, enabled: true}}"`
+
+## ROS2 Topics (besides the usual `robot_base/*`)
+
+- `robot_base/driver` (`sd_msgs/DriverStatus`): temperature of the motor
+  driver and of each motor, current of each motor, bus voltage.
+- `robot_base/pid` (`sd_msgs/BasePid`, transient local): the gains the ECU
+  last reported for the 4 loops.
+- `robot_base/rtos_tasks` (`sd_msgs/RtosTasks`): the ECU's FreeRTOS tasks,
+  busiest first.
+- `robot_base/params` (`sd_msgs/BaseParams`) also carries the ECU, driver
+  and motor firmware versions, the packet rate and the good/bad packet
+  counts.
+
+## Parameters
+
+- `mute_sounds` (bool, default `true`): the driver's own sound effects. It
+  can be changed at runtime (`ros2 param set /robot_comm_serial mute_sounds
+  false`); the web page's switch sets it too.
+
+## Web page (bench only)
+
+The page this node serves (websocketpp, `web/`) talks to the driver
+directly, with no credential, scope or audit. On a robot use
+**sd_supervisor**, which reaches the same functions through
+robot_control_api and the ROM: Status → Periféricos (base details, reboot
+ECU, acknowledge fault, LED test), Configurações → Base (PID, sounds) and
+Tempo real → Base (velocities, IMU, RTOS tasks, ECU log). The page's limits,
+Kalman and open loop forms are only `TODO`s in this driver.
+
+## Tests
+
+```shell
+colcon build --packages-select robot_comm_serial
+colcon test --packages-select robot_comm_serial
+```
+
+`pid_config_test`: each loop number points at its gains, an unknown loop is
+null, a blank field keeps the current gain.
+
 ## Running as Systemd service
 
 1. Create symlinks
