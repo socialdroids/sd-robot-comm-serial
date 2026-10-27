@@ -121,7 +121,7 @@ include_directories(${SDL2_INCLUDE_DIRS})
 add_subdirectory(cmake/serial)
 
 # add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp ${PROTO_SRCS} ${PROTO_HDRS})
-add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c src/navigation_tester.cpp)
+add_executable(${PROJECT_NAME} src/robot_comm_serial.cpp src/websocket_interface.cpp src/cobs.c src/navigation_tester.cpp src/pid_config.cpp)
 
 target_link_libraries(${PROJECT_NAME} Websockets proto_lib ${Protobuf_LIBRARIES} serial 
     nlohmann_json::nlohmann_json SDL2::SDL2 PkgConfig::SDL2_Mixer)
@@ -194,6 +194,13 @@ install(DIRECTORY
 install(FILES ${PROTO_HDRS}
     DESTINATION include/${PROJECT_NAME}
 )
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(pid_config_test tests/unit/pid_config_test.cpp src/pid_config.cpp)
+  target_include_directories(pid_config_test PRIVATE include)
+  target_link_libraries(pid_config_test proto_lib ${Protobuf_LIBRARIES})
+endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(${DEPENDENCIES})

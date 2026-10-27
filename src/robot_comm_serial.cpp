@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <map>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <sstream>
@@ -99,6 +100,25 @@ RobotSerial::RobotSerial()
     fake_charging_fail_count_ = 0;
 
     MAX_RTOS_TASKS = this->declare_parameter<int>("max_rtos_tasks", 10);
+    // The bridge's own sounds (it plays one at random every 10 s). Muted
+    // unless someone turns them on; settable at runtime (ros2 param set, or
+    // the ROM for sd_supervisor).
+    mute = this->declare_parameter<bool>("mute_sounds", true);
+    parameters_callback_ = this->add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter>& parameters)
+        {
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            for (const auto& parameter : parameters)
+            {
+                if (parameter.get_name() == "mute_sounds")
+                {
+                    mute = parameter.as_bool();
+                    RCLCPP_INFO(this->get_logger(), "Mute Sounds: %d", mute);
+                }
+            }
+            return result;
+        });
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
@@ -142,6 +162,13 @@ RobotSerial::RobotSerial()
         "robot_base/power_on_time", best_effort_qos);
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
         "robot_base/battery", best_effort_qos);
+    driver_status_pub_ = this->create_publisher<sd_msgs::msg::DriverStatus>(
+        "robot_base/driver", best_effort_qos);
+    rtos_tasks_pub_ = this->create_publisher<sd_msgs::msg::RtosTasks>(
+        "robot_base/rtos_tasks", best_effort_qos);
+    // Latched: whoever subscribes late still gets the gains in use.
+    base_pid_pub_ = this->create_publisher<sd_msgs::msg::BasePid>(
+        "robot_base/pid", rclcpp::QoS(1).reliable().transient_local());
 
     if (cmd_stamped)
     {
@@ -183,6 +210,12 @@ RobotSerial::RobotSerial()
         "toggle_docking_mode",
         std::bind(&RobotSerial::toggle_docking_mode_srv_callback, this,
                   std::placeholders::_1, std::placeholders::_2));
+    ack_fault_srv_ = this->create_service<std_srvs::srv::Trigger>(
+        "ack_fault", std::bind(&RobotSerial::ack_fault_srv_callback, this,
+                               std::placeholders::_1, std::placeholders::_2));
+    set_pid_srv_ = this->create_service<sd_msgs::srv::SetBasePid>(
+        "set_pid", std::bind(&RobotSerial::set_pid_srv_callback, this,
+                             std::placeholders::_1, std::placeholders::_2));
 
     setupAudio();
     connect();
@@ -457,7 +490,7 @@ void RobotSerial::toggle_docking_mode_srv_callback(
     response->success = true;
 }
 
-void RobotSerial::acknowledge_fault_callback()
+bool RobotSerial::acknowledge_fault_callback()
 {
     RCLCPP_INFO(this->get_logger(), "[Robot Action] ACK Fault");
     if (not jumpToBootStatus.active && not enterStandByStatus.active &&
@@ -470,8 +503,7 @@ void RobotSerial::acknowledge_fault_callback()
         ackFaultStatus.sent = 1;
         ackFaultStatus.data = true;
         ackFaultStatus.sentTimestamp = high_resolution_clock::now();
-
-        // response->success = true;
+        return true;
     }
     else
     {
@@ -482,9 +514,48 @@ void RobotSerial::acknowledge_fault_callback()
             "Reboot=%d",
             jumpToBootStatus.active, enterStandByStatus.active,
             rebootStatus.active);
-        // response->success = false;
-        // response->message = "Another action request is running!";
+        return false;
     }
+}
+
+void RobotSerial::ack_fault_srv_callback(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+    response->success = acknowledge_fault_callback();
+    if (!response->success)
+    {
+        response->message = "Another action request is running!";
+    }
+}
+
+void RobotSerial::set_pid_srv_callback(
+    const std::shared_ptr<sd_msgs::srv::SetBasePid::Request> request,
+    std::shared_ptr<sd_msgs::srv::SetBasePid::Response> response)
+{
+    PIDConfig* cfg = robot_pid::loopOf(
+        *last_command_.mutable_config()->mutable_parameters(), request->loop);
+    if (cfg == nullptr)
+    {
+        response->success = false;
+        response->message = "Unknown PID loop " + std::to_string(request->loop);
+        return;
+    }
+    if (!connected_)
+    {
+        response->success = false;
+        response->message = "The ECU is not connected";
+        return;
+    }
+    RCLCPP_INFO(this->get_logger(),
+                "[Robot Config] PID loop %d: P=%.4f I=%.4f D=%.4f EN=%d",
+                request->loop, request->config.k_p, request->config.k_i,
+                request->config.k_d, request->config.enabled);
+    cfg->set_k_p(request->config.k_p);
+    cfg->set_k_i(request->config.k_i);
+    cfg->set_k_d(request->config.k_d);
+    cfg->set_enabled(request->config.enabled);
+    response->success = true;
 }
 
 void RobotSerial::packet_callback()
@@ -761,6 +832,7 @@ void RobotSerial::decode_buffer()
 
         if (decode_result.status != COBS_DECODE_OK)
         {
+            ++bad_packets_;
             RCLCPP_DEBUG(
                 this->get_logger(),
                 "Failed to decode COBS packet! Error Code:%d. %s",
@@ -783,11 +855,13 @@ void RobotSerial::decode_buffer()
             CRC_t crc_check = crcFast(decoded_packet_, decode_result.out_len);
             if (crc_check != CRC_OK)
             {
+                ++bad_packets_;
                 RCLCPP_DEBUG(this->get_logger(), "Invalid CRC Value! %d != %d",
                              crc_check, CRC_OK);
             }
             else
             {
+                ++good_packets_;
                 FeedbackMessage message;
 
                 // Exclui o valor do CRC
@@ -1004,6 +1078,7 @@ void RobotSerial::publish_data()
     publish_rtos_info();
     publish_base_params();
     publish_power_status();
+    publish_driver_status();
     publish_stand_by_status();
     publish_battery();
     publish_robot_config();
@@ -1293,6 +1368,10 @@ void RobotSerial::publish_base_params()
         // msg.robot_name =
         // last_message_.info().hardware_info().motor_version();
         msg.robot_name = last_message_.info().hardware_info().robot_name();
+        msg.ecu_version = last_message_.info().hardware_info().ecu_version();
+        msg.driver_version =
+            last_message_.info().hardware_info().driver_version();
+        msg.motor_version = last_message_.info().hardware_info().motor_version();
         msg.wheel_distance = last_message_.info().wheel_distance_mm() / 1000.f;
         msg.wheel_diameter = last_message_.info().wheel_diameter_mm() / 1000.f;
 
@@ -1310,6 +1389,9 @@ void RobotSerial::publish_base_params()
         }
     }
 
+    msg.packet_rate = static_cast<uint16_t>(packet_frequency());
+    msg.good_packets = good_packets_;
+    msg.bad_packets = bad_packets_;
     base_params_pub_->publish(msg);
 }
 
@@ -1377,6 +1459,22 @@ void RobotSerial::publish_robot_config()
             last_params_.angular_pid().k_d(),
             last_params_.angular_pid().enabled());
         update_config_info();
+
+        const auto toMsg = [](const PIDConfig& pid)
+        {
+            sd_msgs::msg::PIDConfig cfg;
+            cfg.k_p = pid.k_p();
+            cfg.k_i = pid.k_i();
+            cfg.k_d = pid.k_d();
+            cfg.enabled = pid.enabled();
+            return cfg;
+        };
+        sd_msgs::msg::BasePid pid;
+        pid.linear = toMsg(last_params_.linear_pid());
+        pid.angular = toMsg(last_params_.angular_pid());
+        pid.left_wheel = toMsg(last_params_.left_pid());
+        pid.right_wheel = toMsg(last_params_.right_pid());
+        base_pid_pub_->publish(pid);
     }
 }
 
@@ -1454,6 +1552,18 @@ void RobotSerial::publish_rtos_info()
 
             rtos_tasks["info"].push_back(json_task);
         }
+
+        sd_msgs::msg::RtosTasks tasks_msg;
+        for (const auto& t : tasks)
+        {
+            sd_msgs::msg::RtosTask item;
+            item.name = t.name;
+            item.state = t.state;
+            item.cpu_usage = t.cpu;
+            item.stack_free = t.stack;
+            tasks_msg.tasks.push_back(item);
+        }
+        rtos_tasks_pub_->publish(tasks_msg);
 
         RCLCPP_DEBUG(this->get_logger(), "%s", data.c_str());
         last_message_.mutable_info()->clear_rtos_tasks();
@@ -1546,69 +1656,37 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     else if (type == "set_pid")
     {
         std::string target = data.at("target");
-
-        double lastP, lastI, lastD, lastEN;
-
-        RobotConfig* config = last_command_.mutable_config();
-        RobotParameters* parameters = config->mutable_parameters();
-        PIDConfig* cfg = nullptr;
-
-        if (target == "linear")
+        const std::map<std::string, robot_pid::Loop> loops = {
+            {"linear", robot_pid::Loop::Linear},
+            {"angular", robot_pid::Loop::Angular},
+            {"left", robot_pid::Loop::LeftWheel},
+            {"right", robot_pid::Loop::RightWheel}};
+        const auto loop = loops.find(target);
+        if (loop != loops.end())
         {
-            cfg = parameters->mutable_linear_pid();
-            lastP = last_params_.linear_pid().k_p();
-            lastI = last_params_.linear_pid().k_i();
-            lastD = last_params_.linear_pid().k_d();
-            lastEN = last_params_.linear_pid().enabled();
-        }
-        else if (target == "angular")
-        {
-            cfg = parameters->mutable_angular_pid();
-            lastP = last_params_.angular_pid().k_p();
-            lastI = last_params_.angular_pid().k_i();
-            lastD = last_params_.angular_pid().k_d();
-            lastEN = last_params_.angular_pid().enabled();
-        }
-        else if (target == "left")
-        {
-            cfg = parameters->mutable_left_pid();
-            lastP = last_params_.left_pid().k_p();
-            lastI = last_params_.left_pid().k_i();
-            lastD = last_params_.left_pid().k_d();
-            lastEN = last_params_.left_pid().enabled();
-        }
-        else if (target == "right")
-        {
-            cfg = parameters->mutable_right_pid();
-            lastP = last_params_.right_pid().k_p();
-            lastI = last_params_.right_pid().k_i();
-            lastD = last_params_.right_pid().k_d();
-            lastEN = last_params_.right_pid().enabled();
-        }
-
-        if (cfg != nullptr)
-        {
-            double p = data.at("p").is_null()
-                           ? lastP
-                           : static_cast<double>(data.at("p"));
-            double i = data.at("i").is_null()
-                           ? lastI
-                           : static_cast<double>(data.at("i"));
-            double d = data.at("d").is_null()
-                           ? lastD
-                           : static_cast<double>(data.at("d"));
-            bool enabled = data.at("enabled").is_null()
-                               ? lastEN
-                               : static_cast<bool>(data.at("enabled"));
+            // A field left blank on the page comes as null: keep it.
+            double p = 0, i = 0, d = 0;
+            bool enabled = false;
+            robot_pid::PidUpdate update;
+            if (!data.at("p").is_null()) {p = data.at("p"); update.k_p = &p;}
+            if (!data.at("i").is_null()) {i = data.at("i"); update.k_i = &i;}
+            if (!data.at("d").is_null()) {d = data.at("d"); update.k_d = &d;}
+            if (!data.at("enabled").is_null())
+            {
+                enabled = data.at("enabled");
+                update.enabled = &enabled;
+            }
+            const PIDConfig merged = robot_pid::merge(
+                robot_pid::loopOf(last_params_, loop->second), update);
 
             RCLCPP_INFO(this->get_logger(),
                         "Configurando PID %s: P=%.2f I=%.2f D=%.2f EN=%d",
-                        target.c_str(), p, i, d, enabled);
+                        target.c_str(), merged.k_p(), merged.k_i(),
+                        merged.k_d(), merged.enabled());
 
-            cfg->set_k_p(p);
-            cfg->set_k_i(i);
-            cfg->set_k_d(d);
-            cfg->set_enabled(enabled);
+            *robot_pid::loopOf(
+                *last_command_.mutable_config()->mutable_parameters(),
+                static_cast<uint8_t>(loop->second)) = merged;
         }
     }
     else if (type == "set_limits")
@@ -1676,8 +1754,9 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     }
     else if (type == "mute_sounds")
     {
-        mute = data.at("enabled");
-        RCLCPP_INFO(this->get_logger(), "Mute Sounds: %d", mute);
+        // Through the parameter, so `ros2 param get` and the ROM see it.
+        this->set_parameter(
+            rclcpp::Parameter("mute_sounds", static_cast<bool>(data.at("enabled"))));
     }
     else if (type == "commands")
     {
@@ -2015,6 +2094,24 @@ void RobotSerial::publish_power_status()
     msg.internal_temp.header.frame_id = "mcu";
 
     power_status_pub_->publish(msg);
+}
+
+void RobotSerial::publish_driver_status()
+{
+    if (!last_message_.has_control_feedback() ||
+        !last_message_.control_feedback().has_driver_feedback())
+    {
+        return;
+    }
+    const auto& driver = last_message_.control_feedback().driver_feedback();
+    sd_msgs::msg::DriverStatus msg;
+    msg.driver_temperature = driver.temperature();
+    msg.left_motor_temperature = driver.left().temperature();
+    msg.right_motor_temperature = driver.right().temperature();
+    msg.left_motor_current = driver.left().current();
+    msg.right_motor_current = driver.right().current();
+    msg.bus_voltage = driver.bus_voltage();
+    driver_status_pub_->publish(msg);
 }
 
 void RobotSerial::publish_stand_by_status()
