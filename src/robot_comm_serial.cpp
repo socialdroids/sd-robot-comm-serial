@@ -2181,14 +2181,17 @@ void RobotSerial::publish_stand_by_status()
         begin_shutdown_ = true;
     }
 
-    if (begin_shutdown_ && (duration_cast<milliseconds>(
+    float shutdown_timeout = (duration_cast<milliseconds>(
                                 high_resolution_clock::now() - shutdown_timer_)
-                                .count()) > 5e3)
+                                .count());
+    static bool once = false;
+    if (begin_shutdown_ && shutdown_timeout > 5e3 && !once)
     {
+        once = true;
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
             "zenity --info --text=\"Shutdown Now\"");
-        // system("shutdown now");
+        system("shutdown now");
     }
 }
 
