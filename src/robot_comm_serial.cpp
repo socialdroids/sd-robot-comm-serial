@@ -2165,9 +2165,9 @@ void RobotSerial::publish_stand_by_status()
     {
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
-            "zenity --warning --text=\"Pressione novamente o botão para "
+            "zenity --warning --timeout=30 --text=\"Pressione novamente o botão para "
             "iniciar o desligamento\n\nApós 30s sem confirmação essa ação é "
-            "cancelada!\" --ellipsize");
+            "cancelada!\" --ellipsize &");
         request_shutdown_timer_ = high_resolution_clock::now();
     }
 
@@ -2175,8 +2175,8 @@ void RobotSerial::publish_stand_by_status()
     {
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
-            "zenity --info --text=\"Desligamento confirmado!\nDesligando em "
-            "5 segundos...\"");
+            "zenity --warning --timeout=5 --text=\"Desligamento confirmado!\nDesligando em "
+            "5 segundos...\" &");
         shutdown_timer_ = high_resolution_clock::now();
         begin_shutdown_ = true;
     }
@@ -2190,8 +2190,8 @@ void RobotSerial::publish_stand_by_status()
         once = true;
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
-            "zenity --info --text=\"Shutdown Now\"");
-        system("shutdown now");
+            "zenity --warning --timeout=2 --text=\"Shutdown Now\" &");
+        system("sudo systemctl poweroff");
     }
 }
 
