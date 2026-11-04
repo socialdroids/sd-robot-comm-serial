@@ -198,6 +198,7 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
 
     bool begin_shutdown_;
     std::chrono::time_point<high_resolution_clock> shutdown_timer_;
+    std::chrono::time_point<high_resolution_clock> request_shutdown_timer_;
 
     void cmd_vel_stamped_callback(
         const geometry_msgs::msg::TwistStamped::SharedPtr msg);

@@ -1,6 +1,7 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
 #include "control_logger.hpp"
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -251,6 +252,7 @@ RobotSerial::RobotSerial()
     fake_battery_pub_time_ = high_resolution_clock::now() - milliseconds(5000);
 
     begin_shutdown_ = false;
+    request_shutdown_timer_ = high_resolution_clock::now();
     // === WEBSOCKET
     std::string docroot = "";
 
@@ -2156,26 +2158,36 @@ void RobotSerial::publish_stand_by_status()
     power_on_time_pub_->publish(onTimeMsg);
 
     StandByState state = last_message_.stand_by().state();
-    if (last_message_.stand_by().request())
+    if (last_message_.stand_by().request() &&
+        (duration_cast<milliseconds>(high_resolution_clock::now() -
+                                     request_shutdown_timer_)
+             .count()) > 29e3)
     {
-        system("zenity --warning --text=\"Pressione novamente o botão para "
-               "iniciar o desligamento\n\nApós 30s sem confirmação essa ação é "
-               "cancelada!\" --ellipsize");
+        system(
+            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "zenity --warning --text=\"Pressione novamente o botão para "
+            "iniciar o desligamento\n\nApós 30s sem confirmação essa ação é "
+            "cancelada!\" --ellipsize");
+        request_shutdown_timer_ = high_resolution_clock::now();
     }
 
-    if (state == StandByState::STAND_BY_STATE_SHUTDOWN)
+    if (state == StandByState::STAND_BY_STATE_SHUTDOWN && !begin_shutdown_)
     {
-        system("zenity --info --text=\"Desligamento confirmado!\nDesligando em "
-               "5 segundos...\"");
+        system(
+            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "zenity --info --text=\"Desligamento confirmado!\nDesligando em "
+            "5 segundos...\"");
         shutdown_timer_ = high_resolution_clock::now();
         begin_shutdown_ = true;
     }
 
-    if (begin_shutdown_ &&
-        (duration_cast<milliseconds>(high_resolution_clock::now() -
-                                     shutdown_timer_).count()) > 5e3)
+    if (begin_shutdown_ && (duration_cast<milliseconds>(
+                                high_resolution_clock::now() - shutdown_timer_)
+                                .count()) > 5e3)
     {
-        system("zenity --info --text=\"Shutdown Now\"");
+        system(
+            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "zenity --info --text=\"Shutdown Now\"");
         // system("shutdown now");
     }
 }
