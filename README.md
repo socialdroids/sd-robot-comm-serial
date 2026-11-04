@@ -14,6 +14,15 @@ Not doing so might result in the code not using the updated protofiles.
 ```shell
 sudo apt install libsdl2-dev libsdl2-mixer-dev
 ```
+
+Config for automatic shutdown:
+```shell
+sudo visudo
+# put the following line at the end of the file
+socialdroids ALL=(ALL) NOPASSWD: /usr/sbin/shutdown, /usr/bin/systemctl poweroff
+# Ctrl+O, Enter and Ctrl+X to save and exit
+```
+
 ## ROS2 Services
 
 Enter Stand-by mode:
