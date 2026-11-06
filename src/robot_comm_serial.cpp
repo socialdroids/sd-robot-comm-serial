@@ -1,8 +1,10 @@
 #include "robot_comm_serial.hpp"
 #include "cobs.h"
 #include "control_logger.hpp"
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <map>
@@ -105,8 +107,7 @@ RobotSerial::RobotSerial()
     // the ROM for sd_supervisor).
     mute = this->declare_parameter<bool>("mute_sounds", true);
     parameters_callback_ = this->add_on_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter>& parameters)
-        {
+        [this](const std::vector<rclcpp::Parameter>& parameters) {
             rcl_interfaces::msg::SetParametersResult result;
             result.successful = true;
             for (const auto& parameter : parameters)
@@ -250,6 +251,8 @@ RobotSerial::RobotSerial()
     packet_frequency_.resize(MAX_FREQUENCY_SAMPLES + 1);
     fake_battery_pub_time_ = high_resolution_clock::now() - milliseconds(5000);
 
+    begin_shutdown_ = false;
+    request_shutdown_timer_ = high_resolution_clock::now();
     // === WEBSOCKET
     std::string docroot = "";
 
@@ -1371,7 +1374,8 @@ void RobotSerial::publish_base_params()
         msg.ecu_version = last_message_.info().hardware_info().ecu_version();
         msg.driver_version =
             last_message_.info().hardware_info().driver_version();
-        msg.motor_version = last_message_.info().hardware_info().motor_version();
+        msg.motor_version =
+            last_message_.info().hardware_info().motor_version();
         msg.wheel_distance = last_message_.info().wheel_distance_mm() / 1000.f;
         msg.wheel_diameter = last_message_.info().wheel_diameter_mm() / 1000.f;
 
@@ -1460,8 +1464,7 @@ void RobotSerial::publish_robot_config()
             last_params_.angular_pid().enabled());
         update_config_info();
 
-        const auto toMsg = [](const PIDConfig& pid)
-        {
+        const auto toMsg = [](const PIDConfig& pid) {
             sd_msgs::msg::PIDConfig cfg;
             cfg.k_p = pid.k_p();
             cfg.k_i = pid.k_i();
@@ -1575,10 +1578,10 @@ void RobotSerial::publish_rtos_info()
         // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
         // "%s",
         RCLCPP_DEBUG(this->get_logger(), "%s",
-                    last_message_.control_feedback()
-                        .driver_feedback()
-                        .DebugString()
-                        .c_str());
+                     last_message_.control_feedback()
+                         .driver_feedback()
+                         .DebugString()
+                         .c_str());
     }
 }
 
@@ -1668,9 +1671,21 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
             double p = 0, i = 0, d = 0;
             bool enabled = false;
             robot_pid::PidUpdate update;
-            if (!data.at("p").is_null()) {p = data.at("p"); update.k_p = &p;}
-            if (!data.at("i").is_null()) {i = data.at("i"); update.k_i = &i;}
-            if (!data.at("d").is_null()) {d = data.at("d"); update.k_d = &d;}
+            if (!data.at("p").is_null())
+            {
+                p = data.at("p");
+                update.k_p = &p;
+            }
+            if (!data.at("i").is_null())
+            {
+                i = data.at("i");
+                update.k_i = &i;
+            }
+            if (!data.at("d").is_null())
+            {
+                d = data.at("d");
+                update.k_d = &d;
+            }
             if (!data.at("enabled").is_null())
             {
                 enabled = data.at("enabled");
@@ -1755,8 +1770,8 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
     else if (type == "mute_sounds")
     {
         // Through the parameter, so `ros2 param get` and the ROM see it.
-        this->set_parameter(
-            rclcpp::Parameter("mute_sounds", static_cast<bool>(data.at("enabled"))));
+        this->set_parameter(rclcpp::Parameter(
+            "mute_sounds", static_cast<bool>(data.at("enabled"))));
     }
     else if (type == "commands")
     {
@@ -1793,16 +1808,16 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
         }
         if (cmd == "ack_fault")
         {
-            // auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-            // auto response =
+            // auto request =
+            // std::make_shared<std_srvs::srv::Trigger::Request>(); auto
+            // response =
             //     std::make_shared<std_srvs::srv::Trigger::Response>();
             // acknowledge_fault_callback(request, response);
             acknowledge_fault_callback();
 
             RCLCPP_INFO(this->get_logger(),
-                        "ACK Fault from GUI! Success %d, MSG %s",
-                        true, "");
-                        // response->success, response->message.c_str());
+                        "ACK Fault from GUI! Success %d, MSG %s", true, "");
+            // response->success, response->message.c_str());
         }
 
         if (strstr(cmd.c_str(), "led_") != nullptr)
@@ -2141,6 +2156,43 @@ void RobotSerial::publish_stand_by_status()
                              ? last_message_.stand_by().wake_up().saturday()
                              : false;
     power_on_time_pub_->publish(onTimeMsg);
+
+    StandByState state = last_message_.stand_by().state();
+    if (last_message_.stand_by().request() &&
+        (duration_cast<milliseconds>(high_resolution_clock::now() -
+                                     request_shutdown_timer_)
+             .count()) > 29e3)
+    {
+        system(
+            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "zenity --warning --timeout=30 --text=\"Pressione novamente o botão para "
+            "iniciar o desligamento\n\nApós 30s sem confirmação essa ação é "
+            "cancelada!\" --ellipsize &");
+        request_shutdown_timer_ = high_resolution_clock::now();
+    }
+
+    if (state == StandByState::STAND_BY_STATE_SHUTDOWN && !begin_shutdown_)
+    {
+        system(
+            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "zenity --warning --timeout=5 --text=\"Desligamento confirmado!\nDesligando em "
+            "5 segundos...\" &");
+        shutdown_timer_ = high_resolution_clock::now();
+        begin_shutdown_ = true;
+    }
+
+    float shutdown_timeout = (duration_cast<milliseconds>(
+                                high_resolution_clock::now() - shutdown_timer_)
+                                .count());
+    static bool once = false;
+    if (begin_shutdown_ && shutdown_timeout > 5e3 && !once)
+    {
+        once = true;
+        system(
+            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "zenity --warning --timeout=2 --text=\"Shutdown Now\" &");
+        system("sudo systemctl poweroff");
+    }
 }
 
 int main(int argc, char* argv[])
@@ -2155,4 +2207,3 @@ int main(int argc, char* argv[])
 
     return 0;
 }
-
