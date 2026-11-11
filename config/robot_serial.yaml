@@ -17,3 +17,5 @@ robot_comm_serial:
 
     # Quantidade máxima de tasks para exibir na GUI
     max_rtos_tasks: 10
+    # Habilita/desabilita comando de shutdown para fins de debug
+    enable_shutdown: true

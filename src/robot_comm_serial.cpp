@@ -98,6 +98,7 @@ RobotSerial::RobotSerial()
     fake_charging_ = this->declare_parameter<bool>("fake_charging", false);
     fake_charging_radius_ =
         this->declare_parameter<double>("fake_charging_radius", 0.1);
+    enable_shutdown_ = this->declare_parameter<bool>("enable_shutdown", false);
 
     fake_charging_fail_count_ = 0;
 
@@ -252,7 +253,7 @@ RobotSerial::RobotSerial()
     fake_battery_pub_time_ = high_resolution_clock::now() - milliseconds(5000);
 
     begin_shutdown_ = false;
-    request_shutdown_timer_ = high_resolution_clock::now();
+    request_shutdown_timer_ = high_resolution_clock::now() - std::chrono::seconds(30);
     // === WEBSOCKET
     std::string docroot = "";
 
@@ -2165,7 +2166,8 @@ void RobotSerial::publish_stand_by_status()
     {
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
-            "zenity --warning --timeout=30 --text=\"Pressione novamente o botão para "
+            "zenity --warning --timeout=30 --text=\"Pressione novamente o "
+            "botão para "
             "iniciar o desligamento\n\nApós 30s sem confirmação essa ação é "
             "cancelada!\" --ellipsize &");
         request_shutdown_timer_ = high_resolution_clock::now();
@@ -2175,15 +2177,17 @@ void RobotSerial::publish_stand_by_status()
     {
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
-            "zenity --warning --timeout=5 --text=\"Desligamento confirmado!\nDesligando em "
+            "zenity --warning --timeout=5 --text=\"Desligamento "
+            "confirmado!\nDesligando em "
             "5 segundos...\" &");
         shutdown_timer_ = high_resolution_clock::now();
         begin_shutdown_ = true;
     }
 
-    float shutdown_timeout = (duration_cast<milliseconds>(
-                                high_resolution_clock::now() - shutdown_timer_)
-                                .count());
+    float shutdown_timeout =
+        (duration_cast<milliseconds>(high_resolution_clock::now() -
+                                     shutdown_timer_)
+             .count());
     static bool once = false;
     if (begin_shutdown_ && shutdown_timeout > 5e3 && !once)
     {
@@ -2191,7 +2195,17 @@ void RobotSerial::publish_stand_by_status()
         system(
             "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
             "zenity --warning --timeout=2 --text=\"Shutdown Now\" &");
-        system("sudo systemctl poweroff");
+        if (enable_shutdown_)
+        {
+            system("sudo systemctl poweroff");
+        }
+        else
+        {
+            system("DISPLAY=:0 "
+                   "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+                   "zenity --warning --timeout=5 --text=\"Shutdown Disabled! "
+                   "enable_shutdown=false in config\" &");
+        }
     }
 }
 
