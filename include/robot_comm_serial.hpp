@@ -135,8 +135,6 @@ COBS_ENCODE_DST_BUF_LEN_MAX(FEEDBACK_PB_H_MAX_SIZE+CRC)+DELIMITER};
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr toggle_docking_mode_srv_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr ack_fault_srv_;
     rclcpp::Service<sd_msgs::srv::SetBasePid>::SharedPtr set_pid_srv_;
-    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
-        parameters_callback_;
 
     std::shared_ptr<serial::Serial> serial_port_;
     rclcpp::TimerBase::SharedPtr packet_timer_;

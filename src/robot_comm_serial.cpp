@@ -13,75 +13,6 @@
 #include <sstream>
 #include <string>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
-
-volatile bool finished = true, mute = true;
-Mix_Chunk* sound = nullptr;
-
-void finishedCallback(int /*_ch*/)
-{
-    if (sound != nullptr)
-    {
-        Mix_FreeChunk(sound);
-    }
-    finished = true;
-    // std::cerr << "Music finished!\n";
-    // Mix_CloseAudio();
-}
-
-int setupAudio()
-{
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_AUDIO) < 0)
-    {
-        // std::cerr << "SDL could not initialize! SDL Error: " <<
-        // SDL_GetError()
-        //           << std::endl;
-        return 1;
-    }
-
-    // Initialize SDL_mixer
-    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
-    {
-        // std::cerr << "SDL_mixer could not initialize! SDL_mixer Error: "
-        //           << Mix_GetError() << std::endl;
-        // SDL_Quit();
-        return 1;
-    }
-    return 0;
-}
-
-int playSound(std::string _path)
-{
-    if (mute)
-    {
-        return 0;
-    }
-    // std::cout << "Play " << _path << std::endl;
-    // Load WAV file
-    sound = Mix_LoadWAV(_path.c_str());
-    if (sound == nullptr)
-    {
-        std::cerr << "Failed to load sound effect! SDL_mixer Error: "
-                  << Mix_GetError() << std::endl;
-    }
-    else
-    {
-        // Play the sound (channel -1 finds the first available channel, 0 loops
-        // once, etc.)
-        Mix_ChannelFinished(finishedCallback);
-        Mix_PlayChannel(-1, sound, 0);
-
-        // Wait while the sound is playing (simple wait, a real application
-        // would use a loop/event system) SDL_Delay(2000);
-
-        // Free the sound effect
-        // Mix_FreeChunk(sound);
-    }
-    return 0;
-}
-
 RobotSerial::RobotSerial()
     : Node("robot_comm_serial"), baud_(1000000), port_("/dev/ttyACM0"),
       connected_(false), currentLEDSign(LED_SIGN_UNSPECIFIED), cLogger(false)
@@ -103,24 +34,6 @@ RobotSerial::RobotSerial()
     fake_charging_fail_count_ = 0;
 
     MAX_RTOS_TASKS = this->declare_parameter<int>("max_rtos_tasks", 10);
-    // The bridge's own sounds (it plays one at random every 10 s). Muted
-    // unless someone turns them on; settable at runtime (ros2 param set, or
-    // the ROM for sd_supervisor).
-    mute = this->declare_parameter<bool>("mute_sounds", true);
-    parameters_callback_ = this->add_on_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter>& parameters) {
-            rcl_interfaces::msg::SetParametersResult result;
-            result.successful = true;
-            for (const auto& parameter : parameters)
-            {
-                if (parameter.get_name() == "mute_sounds")
-                {
-                    mute = parameter.as_bool();
-                    RCLCPP_INFO(this->get_logger(), "Mute Sounds: %d", mute);
-                }
-            }
-            return result;
-        });
 
     RCLCPP_INFO(this->get_logger(), "Config File OK!");
     RCLCPP_INFO(this->get_logger(), "Serial Port: %s", port_.c_str());
@@ -219,7 +132,6 @@ RobotSerial::RobotSerial()
         "set_pid", std::bind(&RobotSerial::set_pid_srv_callback, this,
                              std::placeholders::_1, std::placeholders::_2));
 
-    setupAudio();
     connect();
 
     packet_timer_ = this->create_wall_timer(
@@ -1768,12 +1680,6 @@ void RobotSerial::handle_gui_command(const std::string& type, const json& data)
         }
         RCLCPP_INFO(this->get_logger(), "Test Navigation: %s", button.c_str());
     }
-    else if (type == "mute_sounds")
-    {
-        // Through the parameter, so `ros2 param get` and the ROM see it.
-        this->set_parameter(rclcpp::Parameter(
-            "mute_sounds", static_cast<bool>(data.at("enabled"))));
-    }
     else if (type == "commands")
     {
         std::string cmd = data.at("command");
@@ -1984,31 +1890,6 @@ void RobotSerial::publish_full_status()
     if (!connected_)
     {
         return;
-    }
-
-    {
-        const std::string share_dir =
-            ament_index_cpp::get_package_share_directory("robot_comm_serial");
-        const std::array<std::string, 10> music_files = {
-            share_dir + "/config/r2-d2.mp3",
-            share_dir + "/config/1-screaming.mp3",
-            share_dir + "/config/5.mp3",
-            share_dir + "/config/10.mp3",
-            share_dir + "/config/12.mp3",
-            share_dir + "/config/19.mp3",
-            share_dir + "/config/acknowledged-2.mp3",
-            share_dir + "/config/acknowledged.mp3",
-            share_dir + "/config/hee-hee.mp3",
-            share_dir + "/config/worried.mp3"};
-        static double dt = this->get_clock()->now().seconds();
-
-        if (finished && this->get_clock()->now().seconds() - dt > 10)
-        {
-            dt = this->get_clock()->now().seconds();
-
-            size_t index = std::rand() % (music_files.size());
-            playSound(music_files.at(index).c_str());
-        }
     }
 
     json status;
