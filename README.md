@@ -23,6 +23,14 @@ socialdroids ALL=(ALL) NOPASSWD: /usr/sbin/shutdown, /usr/bin/systemctl poweroff
 # Ctrl+O, Enter and Ctrl+X to save and exit
 ```
 
+## Firewall Setup
+
+Allow TCP traffic on port 9002:
+
+```shell
+sudo ufw allow 9002/tcp
+```
+
 ## ROS2 Services
 
 Enter Stand-by mode:
@@ -72,10 +80,6 @@ Set the gains of one control loop:
   counts.
 
 ## Parameters
-
-- `mute_sounds` (bool, default `true`): the driver's own sound effects. It
-  can be changed at runtime (`ros2 param set /robot_comm_serial mute_sounds
-  false`); the web page's switch sets it too.
 
 ## Web page (bench only)
 

@@ -30,7 +30,7 @@ void WebsocketInterface::run()
         m_server.start_accept();
 
         std::cout << "[WebsocketInterface] Servidor iniciado na porta "
-                  << m_port << std::endl;
+                     "http://localhost:" << m_port << "\n";
 
         // Inicia o loop de processamento do ASIO em um thread separado
         m_server_thread = std::thread([this]() {
@@ -142,11 +142,6 @@ void WebsocketInterface::on_message(connection_hdl hdl,
                 m_command_callback(type, data);
         }
         else if (type == "test_nav")
-        {
-            if (m_command_callback)
-                m_command_callback(type, data);
-        }
-        else if (type == "mute_sounds")
         {
             if (m_command_callback)
                 m_command_callback(type, data);

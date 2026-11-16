@@ -751,16 +751,6 @@ Recuperações:       ${info.recoveries   || '0'}`;
             addLog(`Modo Malha Aberta: ${e.target.checked ? 'HABILITADO' : 'DESABILITADO'}`);
         });
 
-        // Silenciar Sons
-        document.getElementById("mute-sounds-check").addEventListener("change", (e) => {
-            const payload = {
-                type: "mute_sounds",
-                enabled: e.target.checked
-            };
-            ws.send(JSON.stringify(payload));
-            addLog(`Silenciar Sons: ${e.target.checked ? 'HABILITADO' : 'DESABILITADO'}`);
-        });
-
         // Kalman
         initMatrix("kalman-model-matrix");
         initMatrix("kalman-measurement-matrix");
